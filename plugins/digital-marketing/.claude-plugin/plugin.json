@@ -1,0 +1,9 @@
+{
+  "name": "digital-marketing",
+  "version": "1.0.0",
+  "description": "Help users with little/no marketing knowledge define, create, execute, measure, and improve digital marketing campaigns using Chrome browser automation",
+  "author": {
+    "name": "spuli"
+  },
+  "keywords": ["marketing", "social-media", "campaigns", "automation", "chrome"]
+}
