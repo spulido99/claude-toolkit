@@ -16,7 +16,7 @@ Personal marketplace of plugins, skills, and commands for Claude Code.
 
 ```bash
 # Add this marketplace from GitHub
-/plugin marketplace add spulidoa/claude-skills
+/plugin marketplace add spulido99/claude-toolkit
 
 # Then install any plugin
 /plugin install deepagents-builder@spuli-plugins
@@ -34,7 +34,7 @@ Then go to **Discover** tab to browse and install.
 
 ```bash
 # Clone the repository
-git clone https://github.com/spulidoa/claude-skills.git
+git clone https://github.com/spulido99/claude-toolkit.git
 
 # Add as local marketplace
 /plugin marketplace add ./claude-skills
