@@ -1,0 +1,41 @@
+{
+  "name": "spuli-plugins",
+  "owner": {
+    "name": "spuli",
+    "email": "spulidoa@gmail.com"
+  },
+  "metadata": {
+    "description": "Personal marketplace of Claude Code plugins for AI development, marketing, and content creation",
+    "version": "1.0.0",
+    "pluginRoot": "../plugins"
+  },
+  "plugins": [
+    {
+      "name": "deepagents-builder",
+      "source": "../plugins/deepagents-builder",
+      "description": "Build production-ready AI agents with LangChain's DeepAgents framework",
+      "version": "1.0.0",
+      "author": {
+        "name": "spuli"
+      }
+    },
+    {
+      "name": "digital-marketing",
+      "source": "../plugins/digital-marketing",
+      "description": "Create and manage digital marketing campaigns with Chrome automation",
+      "version": "1.0.0",
+      "author": {
+        "name": "spuli"
+      }
+    },
+    {
+      "name": "linkedin-ai-voice",
+      "source": "../plugins/linkedin-ai-voice",
+      "description": "Become a LinkedIn Top Voice on AI - content generation and thought leadership",
+      "version": "1.0.0",
+      "author": {
+        "name": "spuli"
+      }
+    }
+  ]
+}
