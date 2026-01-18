@@ -273,10 +273,201 @@ agent = create_deep_agent(
 # Easy to add/remove/modify subagents
 ```
 
+## Anti-Pattern 11: Agent-as-Router
+
+**Symptom**: Using agent intelligence only to route requests rather than take meaningful action.
+
+**Example**:
+```python
+# ❌ BAD: Agent just classifies and routes
+system_prompt = """Classify the user request and call the appropriate API:
+- billing questions → call billing_api
+- support questions → call support_api
+- order questions → call orders_api"""
+# Wastes agent intelligence on simple routing
+```
+
+**Fix**: Let agents take meaningful actions
+```python
+# ✅ GOOD: Agent handles the task end-to-end
+system_prompt = """Handle customer requests:
+- Answer billing questions using account data
+- Resolve support issues by checking status and applying fixes
+- Process orders with validation and confirmation
+- Escalate complex issues with full context summary"""
+```
+
+## Anti-Pattern 12: Build-Then-Add-Agent
+
+**Symptom**: Creating traditional features first, then exposing them as monolithic tools.
+
+**Example**:
+```python
+# ❌ BAD: Monolithic feature exposed to agent
+@tool
+def generate_report(report_type: str) -> str:
+    """Generate the specified report."""
+    # 500 lines of logic agent can't influence or customize
+    if report_type == "sales":
+        return generate_sales_report()
+    elif report_type == "inventory":
+        return generate_inventory_report()
+```
+
+**Fix**: Design atomic tools from the start
+```python
+# ✅ GOOD: Agent composes the workflow
+tools = [
+    query_metrics,       # Agent chooses what to query
+    aggregate_data,      # Agent decides grouping
+    format_as_table,     # Agent picks format
+    export_report,       # Agent chooses destination
+]
+# New report types = new prompts, not new code
+```
+
+## Anti-Pattern 13: Workflow-Shaped Tools
+
+**Symptom**: Tools bundle decision logic instead of being atomic primitives.
+
+**Example**:
+```python
+# ❌ BAD: Tool makes all decisions internally
+@tool
+def smart_process_order(order: dict) -> dict:
+    """Validates, checks inventory, calculates shipping, processes payment."""
+    if not validate(order):
+        return {"error": "invalid"}
+    if not check_inventory(order):
+        return {"error": "out of stock"}
+    shipping = calculate_shipping(order)
+    payment = process_payment(order, shipping)
+    # Agent can't handle partial success, offer alternatives, or retry steps
+    return {"success": True}
+```
+
+**Fix**: Keep tools atomic, let agent compose
+```python
+# ✅ GOOD: Agent controls the workflow
+@tool
+def validate_order(order: dict) -> dict:
+    """Validate order structure and business rules."""
+
+@tool
+def check_inventory(items: list) -> dict:
+    """Check stock availability for items."""
+
+@tool
+def calculate_shipping(address: dict, weight: float) -> dict:
+    """Calculate shipping options and costs."""
+
+@tool
+def process_payment(amount: float, method: str) -> dict:
+    """Process payment transaction."""
+
+# Agent can: retry failed steps, skip optional steps,
+# handle partial inventory, offer alternatives, customize flow
+```
+
+## Anti-Pattern 14: Orphan UI Actions
+
+**Symptom**: Users can do things through UI that agents cannot achieve through tools.
+
+**Example**:
+```python
+# ❌ BAD: UI has bulk actions with no agent equivalent
+# Web UI: "Select all → Archive" (1 click, 100 items)
+# Agent tools:
+tools = [archive_item]  # Only single-item operation
+# Agent must call archive_item() 100 times, or simply cannot do it
+```
+
+**Fix**: Ensure parity between UI and agent capabilities
+```python
+# ✅ GOOD: Agent has equivalent power
+tools = [
+    archive_item,              # Single item (atomic)
+    archive_items_by_ids,      # Batch by selection
+    archive_items_by_filter,   # Batch by criteria (most powerful)
+]
+# Agent can now match or exceed UI efficiency
+```
+
+## Anti-Pattern 15: Context Starvation
+
+**Symptom**: Agent lacks knowledge of available resources and capabilities.
+
+**Example**:
+```python
+# ❌ BAD: Agent doesn't know what's available
+agent = create_deep_agent(
+    tools=[query_db, send_email, generate_report],
+    system_prompt="You are a helpful assistant."
+)
+# Agent doesn't know: which DBs exist, email templates, report formats
+# Results in constant clarification questions or wrong assumptions
+```
+
+**Fix**: Provide resource inventory in AGENTS.md
+```python
+# ✅ GOOD: Agent knows its resources via memory
+agent = create_deep_agent(
+    memory=["./.deepagents/AGENTS.md"],
+    tools=[query_db, send_email, generate_report],
+    system_prompt="You are a helpful assistant."
+)
+
+# .deepagents/AGENTS.md contains:
+# ## Available Resources
+# - Databases: users_db, orders_db, analytics_db
+# - Email templates: /templates/welcome.html, /templates/receipt.html
+# - Report formats: PDF (default), CSV, JSON
+# - API limits: 100 requests/minute
+```
+
+---
+
+## Anti-Pattern 16: Artificial Capability Limits
+
+**Symptom**: Vague restrictions that prevent legitimate use cases without adding security.
+
+**Example**:
+```python
+# ❌ BAD: Vague, overly restrictive
+system_prompt = """You are a support agent.
+DO NOT:
+- Access sensitive data
+- Make changes to accounts
+- Process refunds over $50
+- Do anything risky"""
+# What counts as "sensitive"? "risky"? Agent becomes overly cautious.
+```
+
+**Fix**: Use `interrupt_on` for specific controls
+```python
+# ✅ GOOD: Specific controls with human approval
+from langgraph.checkpoint.memory import MemorySaver
+
+agent = create_deep_agent(
+    checkpointer=MemorySaver(),
+    interrupt_on={
+        "process_refund": {"allowed_decisions": ["approve", "reject"]},
+        "delete_account": {"allowed_decisions": ["approve", "reject"]},
+        "change_subscription": {"allowed_decisions": ["approve", "edit", "reject"]},
+    },
+    system_prompt="You are a support agent with full capabilities."
+)
+# Agent can do anything, but sensitive actions require human approval
+# No vague restrictions—clear, auditable controls
+```
+
+---
+
 ## Detection Checklist
 
 Run through this checklist to identify anti-patterns:
 
+**Classic Anti-Patterns:**
 - [ ] Can subagents make conflicting decisions?
 - [ ] Does main agent have > 30 tools?
 - [ ] Is it unclear when to use each subagent?
@@ -287,3 +478,12 @@ Run through this checklist to identify anti-patterns:
 - [ ] Are there implicit dependencies?
 - [ ] Is the architecture inflexible?
 - [ ] Would a simple script work better?
+
+**Agent-Native Anti-Patterns:**
+- [ ] Can agents do everything users can via UI? (Parity)
+- [ ] Are custom tools atomic, or do they bundle workflows?
+- [ ] Could a new feature be added via prompt alone? (Composability)
+- [ ] Is the agent taking meaningful actions or just routing?
+- [ ] Were tools designed for agents, or retrofitted after UI features?
+- [ ] Does the agent know its available resources? (Context Starvation)
+- [ ] Are restrictions specific and enforceable via `interrupt_on`? (Artificial Limits)

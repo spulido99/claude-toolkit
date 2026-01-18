@@ -52,6 +52,159 @@ subagents = [
 | 10-30 | Platform subagents (capability groups) |
 | > 30 | Domain-specialized subagents |
 
+## Agent-Native Principles
+
+Design applications where agents are first-class citizens, not add-ons.
+
+### 1. Parity
+
+Whatever users can do through the UI, agents should achieve through tools.
+
+```python
+# ❌ BAD: UI has features agent cannot access
+ui_features = ["bulk_delete", "export_csv", "advanced_filters"]
+agent_tools = [delete_single_item]  # Missing capabilities
+
+# ✅ GOOD: Full parity
+agent_tools = [delete_items, export_data, search_with_filters]
+```
+
+### 2. Granularity
+
+Tools should be atomic primitives. Features emerge from agents composing tools in loops—not bundled workflows.
+
+```python
+# ❌ BAD: Workflow bundled into single tool
+@tool
+def handle_order(order_id: str) -> str:
+    """Validates, processes payment, ships, and emails."""
+    # Agent can't customize or retry individual steps
+
+# ✅ GOOD: Atomic primitives
+tools = [validate_order, process_payment, create_shipment, send_notification]
+# Agent composes and handles failures at each step
+```
+
+### 3. Composability
+
+With atomic tools and parity, create new features by writing prompts—no code changes needed.
+
+```python
+# New "rush order" feature = prompt change, not code
+system_prompt = """For rush orders:
+1. validate_order with priority=high
+2. process_payment immediately
+3. create_shipment with express=True
+4. send_notification with urgency=high"""
+```
+
+### 4. Emergent Capability
+
+Agents accomplish unanticipated tasks by composing tools creatively. Design for discovery, not restriction.
+
+### 5. Improvement Over Time
+
+Applications enhance through accumulated context (`AGENTS.md`) and prompt refinement—not code rewrites.
+
+## Data Architecture
+
+### When to Use Files vs Databases
+
+| Use Files For | Use Databases For |
+|--------------|-------------------|
+| Content users should read/edit | High-volume structured data |
+| Configuration (version control) | Complex relational queries |
+| Agent-generated reports | Ephemeral session state |
+| Large text/markdown content | Data requiring indexes |
+
+### Context Management with AGENTS.md
+
+`AGENTS.md` files are **injected into the system prompt** at session start via the `memory` parameter. This is the file-first approach to providing persistent context.
+
+```python
+from deepagents import create_deep_agent
+from deepagents.backends import FilesystemBackend
+
+agent = create_deep_agent(
+    backend=FilesystemBackend(root_dir="/"),
+    memory=[
+        "~/.deepagents/AGENTS.md",      # Global preferences
+        "./.deepagents/AGENTS.md",      # Project-specific context
+    ],
+    system_prompt="You are a project assistant."  # Minimal, AGENTS.md has the rest
+)
+```
+
+**Two levels of AGENTS.md:**
+
+| File | Purpose |
+|------|---------|
+| `~/.deepagents/agent/AGENTS.md` | Global: personality, style, universal preferences |
+| `.deepagents/AGENTS.md` | Project: architecture, conventions, team guidelines |
+
+**Global AGENTS.md example** (`~/.deepagents/agent/AGENTS.md`):
+
+```markdown
+# Global Preferences
+
+## Communication Style
+- Tone: Professional, concise
+- Format output as Markdown tables when showing data
+- Always cite sources for claims
+
+## Universal Coding Preferences
+- Use type hints in Python
+- Prefer functional patterns where appropriate
+- Write tests for new functionality
+```
+
+**Project AGENTS.md example** (`.deepagents/AGENTS.md`):
+
+```markdown
+# Project Context
+
+## Architecture
+- FastAPI backend in /api
+- React frontend in /web
+- PostgreSQL database
+
+## Conventions
+- API endpoints follow REST naming
+- Use Pydantic for validation
+- Run `pytest` before committing
+
+## Available Resources
+- /data/reports/ - Historical reports
+- /config/sources.json - Approved data sources
+```
+
+The agent can update these files using `edit_file` when learning new preferences or receiving feedback.
+
+### Long-Term Memory with CompositeBackend
+
+For persistent memory across conversations, use `CompositeBackend` to route specific paths to durable storage:
+
+```python
+from deepagents import create_deep_agent
+from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
+from langgraph.store.memory import InMemoryStore
+
+agent = create_deep_agent(
+    store=InMemoryStore(),
+    backend=CompositeBackend(
+        default=StateBackend(),                    # Ephemeral by default
+        routes={"/memories/": StoreBackend()},     # Persistent for /memories/
+    ),
+    memory=["./.deepagents/AGENTS.md"],
+    system_prompt="You have persistent memory. Write to /memories/ to remember across sessions."
+)
+```
+
+| Path | Backend | Persistence |
+|------|---------|-------------|
+| `/memories/*` | StoreBackend | Cross-conversation |
+| Everything else | StateBackend | Conversation only |
+
 ## Agent Topologies
 
 Based on Team Topologies, map to these agent types:

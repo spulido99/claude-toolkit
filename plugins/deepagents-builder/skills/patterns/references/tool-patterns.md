@@ -10,6 +10,81 @@ Best practices for defining tools in deep agents.
 4. **Default values**: Support optional parameters
 5. **Required fields**: Mark mandatory parameters
 
+## ⚠️ CRITICAL: Security with ToolRuntime
+
+**Never expose user IDs, API keys, or credentials as tool parameters.** The LLM can pass ANY value to tool parameters—this is a security vulnerability.
+
+### ❌ INSECURE: User ID as Parameter
+
+```python
+@tool
+def get_user_data(user_id: str) -> dict:
+    """Get user profile data."""
+    # DANGER: LLM can pass ANY user_id, accessing other users' data!
+    return fetch_from_db(user_id)
+
+@tool
+def send_email(api_key: str, to: str, body: str) -> bool:
+    """Send email using provided API key."""
+    # DANGER: API key exposed to LLM, can be logged or leaked!
+    return send_via_api(api_key, to, body)
+```
+
+### ✅ SECURE: ToolRuntime Context Injection
+
+```python
+from dataclasses import dataclass
+from langchain.tools import tool, ToolRuntime
+
+@dataclass
+class SecureContext:
+    user_id: str      # Current authenticated user
+    api_key: str      # Service credentials
+    tenant_id: str    # Multi-tenant isolation
+
+@tool
+def get_user_data(runtime: ToolRuntime[SecureContext]) -> dict:
+    """Get current user's profile data."""
+    # SAFE: user_id injected from runtime, not controllable by LLM
+    return fetch_from_db(runtime.context.user_id)
+
+@tool
+def send_email(to: str, body: str, runtime: ToolRuntime[SecureContext]) -> bool:
+    """Send email to specified recipient."""
+    # SAFE: API key from context, user_id for audit
+    return send_via_api(
+        api_key=runtime.context.api_key,
+        from_user=runtime.context.user_id,
+        to=to,
+        body=body
+    )
+
+# Create agent with context schema
+agent = create_deep_agent(
+    tools=[get_user_data, send_email],
+    context_schema=SecureContext
+)
+
+# Invoke with secure context (invisible to LLM)
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "Send an email to john@example.com"}]},
+    context=SecureContext(
+        user_id="user_123",
+        api_key="sk-secret-key",
+        tenant_id="tenant_abc"
+    )
+)
+```
+
+### Security Checklist
+
+- [ ] No user identifiers as tool parameters
+- [ ] No API keys/tokens as tool parameters
+- [ ] No credentials in any form as parameters
+- [ ] Use `ToolRuntime` for all sensitive context
+- [ ] Use `interrupt_on` for destructive operations
+- [ ] Audit logging includes runtime context
+
 ## Pattern 1: Simple Tool
 
 ```python

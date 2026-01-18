@@ -29,7 +29,7 @@ pip install deepagents
 ```python
 from deepagents import create_deep_agent
 
-# Default model is claude-sonnet-4-5-20250929
+# Default model is anthropic:claude-sonnet-4-20250514
 agent = create_deep_agent()
 
 result = agent.invoke({
@@ -52,7 +52,7 @@ def search_web(query: str) -> str:
     return f"Results for: {query}"
 
 agent = create_deep_agent(
-    model="claude-sonnet-4-5-20250929",  # or "anthropic:claude-sonnet-4-20250514"
+    model="anthropic:claude-sonnet-4-20250514",
     tools=[search_web],
     system_prompt="You are a research assistant."
 )
@@ -64,7 +64,7 @@ agent = create_deep_agent(
 from deepagents import create_deep_agent
 
 agent = create_deep_agent(
-    model="claude-sonnet-4-5-20250929",
+    model="anthropic:claude-sonnet-4-20250514",
     system_prompt="You coordinate research projects.",
     subagents=[
         {
@@ -78,13 +78,51 @@ agent = create_deep_agent(
 )
 ```
 
+### Agent with AGENTS.md Memory (File-First)
+
+Use `AGENTS.md` files for persistent context that gets injected into the system prompt:
+
+```python
+from deepagents import create_deep_agent
+from deepagents.backends import FilesystemBackend
+
+agent = create_deep_agent(
+    backend=FilesystemBackend(root_dir="/"),
+    memory=[
+        "~/.deepagents/AGENTS.md",      # Global preferences
+        "./.deepagents/AGENTS.md",      # Project-specific context
+    ],
+    system_prompt="You are a project assistant."  # Minimal role definition
+)
+```
+
+Create `.deepagents/AGENTS.md` in your project:
+
+```markdown
+# Project Context
+
+## Role
+Research assistant for market analysis.
+
+## Preferences
+- Output format: Markdown tables
+- Always cite sources
+- Tone: Professional, concise
+
+## Resources
+- /data/reports/ - Historical reports
+- /config/sources.json - Data sources
+```
+
+The agent can update `AGENTS.md` using `edit_file` when learning new preferences.
+
 ## Built-in Tools (Automatic)
 
 Every agent automatically includes:
 
 | Tool | Purpose |
 |------|---------|
-| `write_todos` | Create task lists |
+| `write_todos` | Create structured task lists |
 | `read_todos` | View current tasks |
 | `ls` | List directory contents |
 | `read_file` | Read file content |
@@ -92,7 +130,37 @@ Every agent automatically includes:
 | `edit_file` | Exact string replacements |
 | `glob` | Find files by pattern |
 | `grep` | Search text in files |
+| `execute` | Run commands in sandbox |
+| `shell` | Run local shell commands |
+| `web_search` | Search the web |
+| `fetch_url` | Fetch URL content |
 | `task` | Delegate to subagents |
+
+## Backend Configuration
+
+Control how filesystem operations work:
+
+| Backend | Purpose | Persistence |
+|---------|---------|-------------|
+| `StateBackend` | Default, in-memory | Ephemeral (conversation) |
+| `FilesystemBackend` | Local disk access | Permanent |
+| `StoreBackend` | Cross-conversation memory | Persistent |
+| `CompositeBackend` | Hybrid routing | Mixed |
+
+```python
+from deepagents import create_deep_agent
+from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
+from langgraph.store.memory import InMemoryStore
+
+# Hybrid: /memories/ persists, everything else is ephemeral
+agent = create_deep_agent(
+    store=InMemoryStore(),
+    backend=CompositeBackend(
+        default=StateBackend(),
+        routes={"/memories/": StoreBackend()},
+    ),
+)
+```
 
 ## When to Use DeepAgents
 
@@ -110,6 +178,27 @@ Every agent automatically includes:
 - MVP/prototyping phase
 - Deterministic workflows (use scripts)
 - Single-purpose automation
+
+## Agent-Native Design Principles
+
+When building applications with DeepAgents, follow these principles:
+
+| Principle | Description |
+|-----------|-------------|
+| **Parity** | Agents can do everything users can via UI |
+| **Granularity** | Custom tools are atomic primitives |
+| **Composability** | New features via prompts, not code |
+| **Emergent Capability** | Agents discover creative compositions |
+| **File-First** | Files as universal interface |
+
+### Quick Checklist
+
+Before shipping an agent-powered feature:
+
+- [ ] Can the agent do everything the UI can?
+- [ ] Are custom tools atomic (not workflow bundles)?
+- [ ] Could you add a new capability by just changing the prompt?
+- [ ] Have you tested what happens when users ask for unexpected things?
 
 ## Cognitive Load Guidelines
 

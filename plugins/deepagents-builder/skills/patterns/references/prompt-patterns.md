@@ -213,6 +213,67 @@ Provide guidance, templates, and best practices for conducting research. You tea
 """
 ```
 
+## File-First Prompts with AGENTS.md
+
+Instead of hardcoding all context in `system_prompt`, use `AGENTS.md` files for persistent, editable context.
+
+### Benefits
+
+- **Persistent**: Survives across sessions
+- **Editable**: Agent can self-update via `edit_file`
+- **Separation**: Role (code) vs context (file)
+- **Version control**: Track changes in git
+
+### Pattern: Minimal system_prompt + Rich AGENTS.md
+
+```python
+from deepagents import create_deep_agent
+
+agent = create_deep_agent(
+    memory=[
+        "~/.deepagents/AGENTS.md",      # Global preferences
+        "./.deepagents/AGENTS.md",      # Project context
+    ],
+    system_prompt="You are a support coordinator."  # Just the role
+)
+```
+
+### AGENTS.md Structure
+
+```markdown
+# Agent Context
+
+## Domain Vocabulary
+- 'Ticket' = customer inquiry
+- 'Resolution' = issue fix
+- 'Escalation' = route to human
+
+## Workflow
+1. Classify incoming request
+2. Route to appropriate specialist
+3. Synthesize results
+4. Follow up if needed
+
+## Escalation Criteria
+- Customer requests human
+- Issue unresolved after 3 attempts
+- Refund amount > $500
+
+## Available Resources
+- /templates/responses/ - Response templates
+- /data/faqs.json - Frequently asked questions
+- /config/routing.yaml - Routing rules
+```
+
+### When to Use Each Approach
+
+| Use `system_prompt` for | Use `AGENTS.md` for |
+|------------------------|---------------------|
+| Core role identity | Domain vocabulary |
+| Hardcoded behaviors | User preferences |
+| Security constraints | Project context |
+| Unchanging rules | Learnable patterns |
+
 ## Anti-Patterns
 
 ### ❌ Too Generic
