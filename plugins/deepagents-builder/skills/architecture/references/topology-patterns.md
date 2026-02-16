@@ -202,10 +202,12 @@ agent = create_deep_agent(
 
 ## Topology Selection Flowchart
 
+> **Note**: This flowchart uses tool count as the primary selector. For an alternative approach that prioritizes domain boundaries first, see [architecture/SKILL.md](../SKILL.md#topology-decision-flow).
+
 ```
 Start
   ↓
-How many tools? 
+How many tools?
   ├─ < 10 → Simple Stream-Aligned
   ├─ 10-30 → Platform-Supported
   └─ > 30 → Continue

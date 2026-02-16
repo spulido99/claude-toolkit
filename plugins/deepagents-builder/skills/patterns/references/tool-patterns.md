@@ -33,6 +33,7 @@ def send_email(api_key: str, to: str, body: str) -> bool:
 ### ✅ SECURE: ToolRuntime Context Injection
 
 ```python
+import os
 from dataclasses import dataclass
 from langchain.tools import tool, ToolRuntime
 
@@ -70,7 +71,7 @@ result = agent.invoke(
     {"messages": [{"role": "user", "content": "Send an email to john@example.com"}]},
     context=SecureContext(
         user_id="user_123",
-        api_key="sk-secret-key",
+        api_key=os.environ["SERVICE_API_KEY"],
         tenant_id="tenant_abc"
     )
 )
@@ -161,8 +162,10 @@ def safe_execute(command: str, runtime: ToolRuntime) -> dict:
             timeout=30,
             cwd="/sandbox",           # Restricted directory
             env={},                   # No environment inheritance
-            user="nobody",            # Unprivileged user (Linux)
+            user=65534,               # nobody UID
         )
+        # TODO: Validate that resolved paths from cmd_parts stay within /sandbox
+        # Use os.path.realpath() to resolve symlinks before checking prefix
         return {
             "stdout": result.stdout.decode()[:10000],  # Limit output size
             "stderr": result.stderr.decode()[:1000],
@@ -437,8 +440,8 @@ def analyze_and_store(data: dict) -> dict:
 ```python
 # Related tools with consistent interface
 @tool
-def db_query_sql(query: str) -> list[dict]:
-    """Execute SQL query on primary database."""
+def db_query_sql(query: str, params: dict = {}) -> list[dict]:
+    """Execute parameterized SQL query. Use ? placeholders for dynamic values. WARNING: Never concatenate user input into queries."""
 
 @tool
 def db_query_nosql(collection: str, filter: dict) -> list[dict]:

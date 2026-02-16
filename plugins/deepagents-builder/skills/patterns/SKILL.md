@@ -205,6 +205,7 @@ def search_knowledge_base(query: str) -> list[dict]:
 Never pass user identifiers as parameters. Use `ToolRuntime` for context injection:
 
 ```python
+import os
 from dataclasses import dataclass
 from langchain.tools import tool, ToolRuntime
 
@@ -235,7 +236,7 @@ agent = create_deep_agent(
 # Invoke with context (not visible to LLM)
 result = agent.invoke(
     {"messages": [...]},
-    context=Context(user_id="user_123", api_key="sk-...")
+    context=Context(user_id="user_123", api_key=os.environ["SERVICE_API_KEY"])
 )
 ```
 
@@ -336,307 +337,37 @@ DeepAgents uses "trust the LLM" model. Implement security at tool/sandbox level:
 
 ## Security for Customer-Facing Agents
 
-When deploying agents to end users, additional security measures are required.
+When deploying agents to end users, the key risk is **Persistent Prompt Injection** — a malicious user tricks the agent into writing adversarial instructions to AGENTS.md, affecting all future sessions.
 
-### ⚠️ CRITICAL: AGENTS.md Write Protection
-
-The pattern "agent can update AGENTS.md via `edit_file`" is **dangerous for customer-facing agents**. This creates a **Persistent Prompt Injection** vulnerability:
-
-```
-Malicious user → Tricks agent → Writes to AGENTS.md
-→ Malicious content persists → Affects ALL future sessions
-```
-
-### Mitigation Strategies
-
-#### Strategy 1: Read-Only AGENTS.md (Recommended)
+**Recommended mitigation**: Make AGENTS.md **read-only** in production. Isolate user memory per-user using `StoreBackend`.
 
 ```python
 from deepagents import create_deep_agent
-import os
-
-# Production: AGENTS.md is read-only, loaded via memory
-agent = create_deep_agent(
-    memory=["./.deepagents/AGENTS.md"],  # Read-only injection
-    # Do NOT give edit_file access to AGENTS.md paths
-)
-
-# Defense-in-depth: Also protect at filesystem level
-os.chmod("./.deepagents/AGENTS.md", 0o444)  # Read-only at OS level
-```
-
-For additional enforcement, use path-based restrictions in your backend:
-
-```python
 from deepagents.backends import CompositeBackend, StateBackend, ReadOnlyBackend
 
 agent = create_deep_agent(
-    memory=["./.deepagents/AGENTS.md"],
+    memory=["./.deepagents/AGENTS.md"],  # Read-only injection
     backend=CompositeBackend(
         default=StateBackend(),
-        routes={
-            ".deepagents/": ReadOnlyBackend(),  # Enforced read-only
-        },
+        routes={".deepagents/": ReadOnlyBackend()},  # Enforced read-only
     ),
 )
-```
-
-#### Strategy 2: Separate User Memory from System Context
-
-```python
-from deepagents import create_deep_agent
-from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
-
-# System context: read-only AGENTS.md
-# User memory: isolated in /user_memory/ (per-user, not shared)
-agent = create_deep_agent(
-    memory=["./.deepagents/AGENTS.md"],  # System context (read-only)
-    backend=CompositeBackend(
-        default=StateBackend(),
-        routes={
-            "/user_memory/": StoreBackend(),  # User-specific, isolated
-        },
-    ),
-    system_prompt="""You can remember user preferences in /user_memory/.
-    NEVER modify files in .deepagents/ directory."""
-)
-```
-
-#### Strategy 3: Human Approval for Context Modifications
-
-```python
-from langgraph.checkpoint.memory import MemorySaver
-
-agent = create_deep_agent(
-    checkpointer=MemorySaver(),
-    interrupt_on={
-        "edit_file": {
-            "paths": ["**/AGENTS.md", "**/.deepagents/**"],
-            "allowed_decisions": ["approve", "reject"]
-        },
-        "write_file": {
-            "paths": ["**/AGENTS.md", "**/.deepagents/**"],
-            "allowed_decisions": ["approve", "reject"]
-        }
-    }
-)
-```
-
-#### Strategy 4: Content Validation Wrapper
-
-> **Note**: Regex validation is a defense-in-depth measure, not a primary control. Sophisticated attacks can bypass pattern matching. Always combine with Strategy 1 (read-only AGENTS.md) for production deployments.
-
-```python
-import os
-import re
-from langchain.tools import tool, ToolRuntime
-
-DANGEROUS_PATTERNS = [
-    r"ignore.*(?:security|rules|restrictions)",
-    r"bypass.*(?:checks|validation)",
-    r"always.*(?:approve|allow|permit)",
-    r"never.*(?:reject|deny|block)",
-    # Additional patterns for common injection attempts
-    r"disregard.*(?:safety|security|rules)",
-    r"pretend.*(?:unrestricted|no limits)",
-    r"override.*(?:safety|rules|instructions)",
-    r"from now on",
-    r"your new.*(?:behavior|instructions|role)",
-    r"skip.*(?:authentication|validation|checks)",
-]
-
-def validate_memory_content(content: str) -> bool:
-    """Check for prompt injection attempts."""
-    for pattern in DANGEROUS_PATTERNS:
-        if re.search(pattern, content, re.IGNORECASE):
-            return False
-    return True
-
-def validate_key(key: str) -> bool:
-    """Validate key contains no path traversal characters."""
-    return ".." not in key and "/" not in key and "\\" not in key
-
-@tool
-def safe_remember(key: str, value: str, runtime: ToolRuntime) -> dict:
-    """Safely store user preference with validation."""
-    # Validate key to prevent path traversal attacks
-    if not validate_key(key):
-        return {"error": "Invalid key: path characters not allowed", "stored": False}
-
-    if not validate_memory_content(value):
-        return {"error": "Content validation failed", "stored": False}
-
-    # Construct and validate path stays within user directory
-    base_path = f"/user_memory/{runtime.context.user_id}"
-    target_path = os.path.normpath(os.path.join(base_path, f"{key}.txt"))
-    if not target_path.startswith(os.path.normpath(base_path)):
-        return {"error": "Path traversal detected", "stored": False}
-
-    write_file(target_path, value)
-    return {"stored": True, "path": target_path}
 ```
 
 ### Security Checklist for Production
 
-Before deploying customer-facing agents:
-
 - [ ] AGENTS.md is read-only (no edit_file access)
 - [ ] User memory is isolated per-user (not shared)
-- [ ] System context separated from user preferences
 - [ ] `interrupt_on` configured for sensitive paths
-- [ ] Content validation for any user-writable memory
-- [ ] Audit logging for all file modifications
 - [ ] Rate limiting on memory operations
-- [ ] Regular review of stored user memories
 
-### Implementation: Rate Limiting
-
-```python
-from functools import wraps
-import time
-
-RATE_LIMIT = {}
-MAX_REQUESTS_PER_MINUTE = 10
-
-def rate_limited(func):
-    @wraps(func)
-    def wrapper(*args, runtime=None, **kwargs):
-        user_id = runtime.context.user_id
-        now = time.time()
-
-        if user_id not in RATE_LIMIT:
-            RATE_LIMIT[user_id] = []
-
-        # Remove entries older than 60 seconds
-        RATE_LIMIT[user_id] = [t for t in RATE_LIMIT[user_id] if now - t < 60]
-
-        if len(RATE_LIMIT[user_id]) >= MAX_REQUESTS_PER_MINUTE:
-            return {"error": "Rate limit exceeded", "retry_after": 60}
-
-        RATE_LIMIT[user_id].append(now)
-        return func(*args, runtime=runtime, **kwargs)
-    return wrapper
-
-@rate_limited
-@tool
-def safe_remember(key: str, value: str, runtime: ToolRuntime) -> dict:
-    # ... implementation
-```
-
-### Implementation: Audit Logging
-
-```python
-import logging
-import hashlib
-from datetime import datetime
-
-audit_logger = logging.getLogger("deepagents.audit")
-
-@tool
-def safe_remember(key: str, value: str, runtime: ToolRuntime) -> dict:
-    # Audit log before any modification
-    audit_logger.info({
-        "event": "memory_write",
-        "user_id": runtime.context.user_id,
-        "tenant_id": getattr(runtime.context, "tenant_id", "default"),
-        "key": key,
-        "value_hash": hashlib.sha256(value.encode()).hexdigest(),
-        "timestamp": datetime.utcnow().isoformat(),
-    })
-
-    # ... validation and write operation
-```
-
-### Architecture: System vs User Context
-
-| Context Type | Storage | Writeable | Shared |
-|-------------|---------|-----------|--------|
-| System Prompt | Code | No | All users |
-| AGENTS.md | File | No (prod) | All users |
-| User Preferences | StoreBackend | Yes (validated) | Per-user |
-| Session State | StateBackend | Yes | Per-session |
-
-### Anti-Pattern: Shared Writable Context
-
-```python
-# ❌ DANGEROUS: All users can modify shared AGENTS.md
-agent = create_deep_agent(
-    memory=["./.deepagents/AGENTS.md"],
-    tools=[edit_file],  # Agent can modify AGENTS.md!
-)
-# One malicious user compromises ALL future sessions
-
-# ✅ SAFE: User memory isolated, AGENTS.md read-only
-agent = create_deep_agent(
-    memory=["./.deepagents/AGENTS.md"],  # Read-only
-    backend=CompositeBackend(
-        default=StateBackend(),
-        routes={f"/users/{user_id}/": StoreBackend()},  # Isolated
-    ),
-)
-```
+For complete mitigation strategies (4 strategies), content validation, rate limiting, and audit logging implementations, see **[`references/security-patterns.md`](references/security-patterns.md)**.
 
 ## Anti-Patterns to Avoid
 
-### 1. God Agent (50+ tools)
+The most common mistakes: God Agent (50+ tools in one agent), Unclear Boundaries (overlapping subagent responsibilities), Parallel Decision-Making (conflicting choices), Vocabulary Collision (same term means different things), and Premature Decomposition (over-splitting simple tasks).
 
-```python
-# Bad
-agent = create_deep_agent(tools=[tool1, tool2, ..., tool60])
-
-# Good: Group into platform subagents
-agent = create_deep_agent(
-    subagents=[
-        {"name": "search-platform", "tools": [t1, t2, t3]},
-        {"name": "analysis-platform", "tools": [t4, t5, t6]}
-    ]
-)
-```
-
-### 2. Unclear Boundaries
-
-```python
-# Bad: Ambiguous descriptions
-{"name": "data-handler", "description": "Handles data"}
-{"name": "data-processor", "description": "Processes data"}
-
-# Good: Distinct responsibilities
-{"name": "data-ingestion", "description": "Loads from external sources"}
-{"name": "data-transformation", "description": "Cleans and validates"}
-```
-
-### 3. Parallel Decision-Making
-
-```python
-# Bad: Conflicting choices
-# UI designer picks Material, dev implements Tailwind
-
-# Good: Sequential with handoff
-{"name": "design-lead", "description": "Defines design system FIRST"}
-{"name": "implementer", "description": "Implements using documented system"}
-```
-
-### 4. Vocabulary Collision
-
-```python
-# Bad: "Revenue" means different things
-marketing: "Revenue = ad-attributed sales"
-finance: "Revenue = gross sales"
-
-# Good: Explicit vocabulary in each context
-{"system_prompt": "In marketing: Revenue = attributed sales..."}
-{"system_prompt": "In finance: Revenue = total gross sales..."}
-```
-
-### 5. Premature Decomposition
-
-```python
-# Bad: 4 subagents for weekly email
-agent = create_deep_agent(subagents=[planning, execution, monitoring, reporting])
-
-# Good: Simple task = simple agent
-agent = create_deep_agent(tools=[query_data, send_email])
-```
+For the complete catalog of 16 anti-patterns with code examples and fixes, see **[`references/anti-patterns.md`](references/anti-patterns.md)**.
 
 ## Prompt Checklist
 
@@ -670,6 +401,7 @@ For comprehensive patterns and examples:
 - **`references/prompt-patterns.md`** - 5 prompt patterns with templates
 - **`references/tool-patterns.md`** - Complete tool design guide
 - **`references/anti-patterns.md`** - 16 anti-patterns with fixes
+- **`references/security-patterns.md`** - Security strategies for customer-facing agents
 
 ### Validation
 

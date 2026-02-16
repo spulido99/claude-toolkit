@@ -70,7 +70,7 @@ agent = create_deep_agent(
         {
             "name": "researcher",
             "description": "Conducts in-depth research on topics",
-            "system_prompt": "You are an expert researcher.",
+            "system_prompt": "You are an expert researcher. Summarize findings concisely. Keep responses under 500 tokens.",
             "tools": [search_web],
             "model": "openai:gpt-4o"  # Optional: different model per subagent
         }
@@ -116,7 +116,7 @@ Research assistant for market analysis.
 - /config/sources.json - Data sources
 ```
 
-The agent can update `AGENTS.md` using `edit_file` when learning new preferences.
+**For internal/trusted agents only:** The agent can update `AGENTS.md` using `edit_file` when learning new preferences. By default, treat `AGENTS.md` as read-only.
 
 > **Security Note**: Writable `AGENTS.md` is appropriate for internal/trusted agents only. For customer-facing agents, see [Security for Customer-Facing Agents](../patterns/SKILL.md#security-for-customer-facing-agents) to prevent Persistent Prompt Injection attacks.
 
@@ -139,6 +139,8 @@ Every agent automatically includes:
 | `web_search` | Search the web |
 | `fetch_url` | Fetch URL content |
 | `task` | Delegate to subagents |
+
+> **Security Warning**: The `shell` and `execute` tools grant direct system access. Disable or restrict them for customer-facing agents. See [Shell Security](../patterns/references/tool-patterns.md#shell-execute-tool-security) for mitigation strategies.
 
 ## Backend Configuration
 

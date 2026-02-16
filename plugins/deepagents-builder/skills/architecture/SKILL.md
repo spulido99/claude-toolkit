@@ -209,7 +209,7 @@ agent = create_deep_agent(
 - /config/sources.json - Approved data sources
 ```
 
-The agent can update these files using `edit_file` when learning new preferences or receiving feedback.
+**For internal/trusted agents only:** The agent can update these files using `edit_file` when learning new preferences or receiving feedback. By default, treat `AGENTS.md` as read-only.
 
 > **Security Note**: Writable `AGENTS.md` is appropriate for internal/trusted agents only. For customer-facing agents, see the [Security for Customer-Facing Agents](../patterns/SKILL.md#security-for-customer-facing-agents) section in patterns/SKILL.md to prevent Persistent Prompt Injection attacks.
 
@@ -321,6 +321,19 @@ Beyond tool count and domain boundaries, consider:
 | **Observability** | Simple tracing sufficient | Need per-domain visibility |
 
 > **Note**: The 10/30 tool thresholds align with cognitive load research (7±2 items). Adjust based on tool complexity—10 simple tools may be fine, while 5 complex tools might warrant decomposition.
+
+### Token Economy Considerations
+
+Each subagent call creates a new LLM context (system prompt + task + tool schemas). Keep in mind:
+
+| Pattern | Token Impact |
+|---------|-------------|
+| Each subagent delegation | ~2,000-5,000 tokens overhead per call |
+| Hierarchical nesting (N levels) | N x single-call latency minimum |
+| Parallel subagents | Multiplies cost by number of parallel agents |
+| Large system prompts on high-frequency agents | Repeated on every API call |
+
+**Tip**: Use the AGENTS.md file-first approach to load context once at session start rather than repeating it in every system prompt.
 
 ## Design Process
 
