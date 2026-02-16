@@ -78,13 +78,13 @@ agent = create_deep_agent(
         {
             "name": "customer-support",
             "description": "Handles inquiries and issues",
-            "prompt": "In support context: 'ticket' = customer issue...",
+            "system_prompt": "In support context: 'ticket' = customer issue...",
             "tools": [support_kb, ticket_system]
         },
         {
             "name": "order-management",
             "description": "Manages orders and fulfillment",
-            "prompt": "In order context: 'order' = purchase transaction...",
+            "system_prompt": "In order context: 'order' = purchase transaction...",
             "tools": [order_api, shipping_api]
         }
     ]
@@ -209,12 +209,11 @@ Score your agent architecture (0-5 for each):
 - [ ] Experimentation (0: none, 5: A/B testing)
 - [ ] Feedback loops (0: none, 5: automated)
 
-**Total Score:**
+**Total Score (max 80):**
 - 0-20: Level 1 (Initial)
 - 21-40: Level 2 (Managed)
 - 41-60: Level 3 (Defined)
-- 61-80: Level 4 (Measured)
-- 81-100: Level 5 (Optimizing)
+- 61-80: Level 4+ (Measured/Optimizing)
 
 ## Migration Paths
 

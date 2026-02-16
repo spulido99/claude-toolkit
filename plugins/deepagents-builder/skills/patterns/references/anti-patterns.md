@@ -184,14 +184,14 @@ finance_agent: "Revenue = gross sales"
 ```python
 # ✅ GOOD: Each context defines vocabulary
 marketing_agent = {
-    "prompt": """In marketing context:
+    "system_prompt": """In marketing context:
     'Revenue' = attributed sales from campaign
     'Cost' = ad spend + overhead
     'ROI' = (Revenue - Cost) / Cost"""
 }
 
 finance_agent = {
-    "prompt": """In finance context:
+    "system_prompt": """In finance context:
     'Revenue' = total gross sales
     'Cost' = COGS + operating expenses
     'Profit' = Revenue - Cost"""

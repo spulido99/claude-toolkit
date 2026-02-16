@@ -114,7 +114,7 @@ agent = create_deep_agent(
         {
             "name": "inquiry-handler",
             "description": "Answers customer questions about products, orders, and policies",
-            "prompt": """You handle customer inquiries. In your context:
+            "system_prompt": """You handle customer inquiries. In your context:
             - 'Customer' = person making purchase
             - 'Inquiry' = question needing answer
             - 'Knowledge Base' = FAQ and help docs""",
@@ -125,7 +125,7 @@ agent = create_deep_agent(
         {
             "name": "issue-resolver",
             "description": "Diagnoses and resolves customer problems and complaints",
-            "prompt": """You resolve customer issues. In your context:
+            "system_prompt": """You resolve customer issues. In your context:
             - 'Issue' = problem preventing satisfaction
             - 'Resolution' = fix or compensation
             - 'Escalation' = route to specialist""",
@@ -136,7 +136,7 @@ agent = create_deep_agent(
         {
             "name": "order-specialist",
             "description": "Manages order modifications, cancellations, and tracking",
-            "prompt": """You manage orders. In your context:
+            "system_prompt": """You manage orders. In your context:
             - 'Order' = purchase transaction
             - 'Status' = current fulfillment stage
             - 'Modification' = change before shipping""",
@@ -305,13 +305,13 @@ subagents = [
     {
         "name": "context-x-platform",
         "description": "Handles capabilities A and B",
-        "prompt": "Vocabulary for context X...",
+        "system_prompt": "Vocabulary for context X...",
         "tools": [tools_for_A, tools_for_B]
     },
     {
         "name": "context-y-specialist",
         "description": "Handles capability C",
-        "prompt": "Vocabulary for context Y...",
+        "system_prompt": "Vocabulary for context Y...",
         "tools": [tools_for_C]
     }
 ]

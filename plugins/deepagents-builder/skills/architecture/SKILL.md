@@ -155,7 +155,7 @@ from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
 
 agent = create_deep_agent(
-    backend=FilesystemBackend(root_dir="/"),
+    backend=FilesystemBackend(root_dir="./"),  # Scope to project directory
     memory=[
         "~/.deepagents/AGENTS.md",      # Global preferences
         "./.deepagents/AGENTS.md",      # Project-specific context
@@ -163,6 +163,8 @@ agent = create_deep_agent(
     system_prompt="You are a project assistant."  # Minimal, AGENTS.md has the rest
 )
 ```
+
+> **Security Warning**: Never use `root_dir="/"` — it grants the agent read/write access to your entire filesystem. Always scope to the project directory or a dedicated workspace.
 
 **Two levels of AGENTS.md:**
 

@@ -69,17 +69,17 @@ customer_agent = {
 subagents = [
     {
         "name": "customer-support",
-        "prompt": "In support: 'customer' = person with issue...",
+        "system_prompt": "In support: 'customer' = person with issue...",
         "tools": [support_kb, ticket_system]
     },
     {
         "name": "sales-operations",
-        "prompt": "In sales: 'customer' = prospect or lead...",
+        "system_prompt": "In sales: 'customer' = prospect or lead...",
         "tools": [lead_scoring, crm_update]
     },
     {
         "name": "marketing-engagement",
-        "prompt": "In marketing: 'customer' = segment member...",
+        "system_prompt": "In marketing: 'customer' = segment member...",
         "tools": [email_campaigns, segments]
     }
 ]
@@ -210,7 +210,7 @@ agent = create_deep_agent(
         {
             "name": "research-advisor",
             "description": "Provides research methodology guidance",
-            "prompt": "You teach research methods...",
+            "system_prompt": "You teach research methods...",
             "tools": [methodology_guides, templates, examples]
         }
     ]

@@ -64,7 +64,7 @@ agent = create_deep_agent(
         {
             "name": "inventory-manager",
             "description": "Manages product inventory and stock levels",
-            "prompt": """You manage inventory. In your context:
+            "system_prompt": """You manage inventory. In your context:
             - 'Stock' = available units in warehouse
             - 'Reserved' = units in pending orders
             - 'Replenishment' = automatic reorder process""",
@@ -73,7 +73,7 @@ agent = create_deep_agent(
         {
             "name": "order-processor",
             "description": "Processes customer orders and fulfillment",
-            "prompt": """You process orders. In your context:
+            "system_prompt": """You process orders. In your context:
             - 'Order' = customer purchase with line items
             - 'Fulfillment' = picking, packing, shipping
             - 'Status' = ordered → processing → shipped → delivered""",
@@ -82,7 +82,7 @@ agent = create_deep_agent(
         {
             "name": "customer-service",
             "description": "Handles customer inquiries and issues",
-            "prompt": """You provide customer service. In your context:
+            "system_prompt": """You provide customer service. In your context:
             - 'Ticket' = customer inquiry or complaint
             - 'Resolution' = issue fix or customer satisfaction
             - 'Escalation' = route to specialist or manager""",
@@ -113,7 +113,7 @@ main_agent = create_deep_agent(
 sales_department = {
     "name": "sales-operations",
     "description": "Manages all sales activities",
-    "prompt": "You coordinate sales teams...",
+    "system_prompt": "You coordinate sales teams...",
     "tools": [crm_access],
     # Can itself have subagents
     "model": "openai:gpt-4o",
@@ -176,7 +176,7 @@ agent = create_deep_agent(
         {
             "name": "research-methodology-advisor",
             "description": "Provides one-time guidance on research best practices",
-            "prompt": "You teach research methods...",
+            "system_prompt": "You teach research methods...",
             "tools": [methodology_templates, example_studies]
         },
         # After transfer, main agent has capability
