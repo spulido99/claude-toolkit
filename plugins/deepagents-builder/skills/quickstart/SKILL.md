@@ -116,6 +116,8 @@ Research assistant for market analysis.
 
 The agent can update `AGENTS.md` using `edit_file` when learning new preferences.
 
+> **Security Note**: Writable `AGENTS.md` is appropriate for internal/trusted agents only. For customer-facing agents, see [Security for Customer-Facing Agents](../patterns/SKILL.md#security-for-customer-facing-agents) to prevent Persistent Prompt Injection attacks.
+
 ## Built-in Tools (Automatic)
 
 Every agent automatically includes:
@@ -189,7 +191,7 @@ When building applications with DeepAgents, follow these principles:
 | **Granularity** | Custom tools are atomic primitives |
 | **Composability** | New features via prompts, not code |
 | **Emergent Capability** | Agents discover creative compositions |
-| **File-First** | Files as universal interface |
+| **Improvement Over Time** | Enhance via accumulated context, not code rewrites |
 
 ### Quick Checklist
 

@@ -102,9 +102,38 @@ system_prompt = """For rush orders:
 
 Agents accomplish unanticipated tasks by composing tools creatively. Design for discovery, not restriction.
 
+```python
+# User asks: "Send weekly stakeholder updates every Friday"
+# Agent CREATIVELY composes tools not originally designed for this:
+tools = [query_db, aggregate_metrics, generate_summary, send_email]
+
+# Agent figures out a workflow:
+# 1. Query project metrics from database
+# 2. Aggregate into weekly summary
+# 3. Generate human-readable report
+# 4. Email to stakeholder list
+# No "create_weekly_report" tool needed—agent composes existing tools!
+```
+
 ### 5. Improvement Over Time
 
 Applications enhance through accumulated context (`AGENTS.md`) and prompt refinement—not code rewrites.
+
+```markdown
+# Example: Agent learns from user feedback
+
+## Before feedback
+Agent generates text-only reports.
+
+## User feedback
+"Include chart images in reports"
+
+## Agent updates AGENTS.md:
+### Learned Preferences
+- Reports should include visual charts
+- Use generate_chart tool before send_email
+- Chart style: bar charts for comparisons, line charts for trends
+```
 
 ## Data Architecture
 
@@ -139,10 +168,10 @@ agent = create_deep_agent(
 
 | File | Purpose |
 |------|---------|
-| `~/.deepagents/agent/AGENTS.md` | Global: personality, style, universal preferences |
-| `.deepagents/AGENTS.md` | Project: architecture, conventions, team guidelines |
+| `~/.deepagents/AGENTS.md` | Global: personality, style, universal preferences |
+| `./.deepagents/AGENTS.md` | Project: architecture, conventions, team guidelines |
 
-**Global AGENTS.md example** (`~/.deepagents/agent/AGENTS.md`):
+**Global AGENTS.md example** (`~/.deepagents/AGENTS.md`):
 
 ```markdown
 # Global Preferences
@@ -180,6 +209,8 @@ agent = create_deep_agent(
 
 The agent can update these files using `edit_file` when learning new preferences or receiving feedback.
 
+> **Security Note**: Writable `AGENTS.md` is appropriate for internal/trusted agents only. For customer-facing agents, see the [Security for Customer-Facing Agents](../patterns/SKILL.md#security-for-customer-facing-agents) section in patterns/SKILL.md to prevent Persistent Prompt Injection attacks.
+
 ### Long-Term Memory with CompositeBackend
 
 For persistent memory across conversations, use `CompositeBackend` to route specific paths to durable storage:
@@ -189,11 +220,13 @@ from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
 from langgraph.store.memory import InMemoryStore
 
+store = InMemoryStore()
+
 agent = create_deep_agent(
-    store=InMemoryStore(),
+    store=store,
     backend=CompositeBackend(
-        default=StateBackend(),                    # Ephemeral by default
-        routes={"/memories/": StoreBackend()},     # Persistent for /memories/
+        default=StateBackend(),                         # Ephemeral by default
+        routes={"/memories/": StoreBackend(store=store)},  # Persistent for /memories/
     ),
     memory=["./.deepagents/AGENTS.md"],
     system_prompt="You have persistent memory. Write to /memories/ to remember across sessions."
@@ -263,16 +296,29 @@ Knowledge transfer, then steps back.
 Start
   |
   v
-How many tools?
-  |-- < 10 --> Simple: Single agent
-  |-- 10-30 --> Platform: Group by capability
-  |-- > 30 --> Continue
+Clear domain boundaries?
+  |-- Yes --> Domain-Specialized subagents
+  |-- No --> Continue
          |
          v
-    Clear domain boundaries?
-      |-- Yes --> Domain-Specialized
-      |-- No --> Hierarchical Decomposition
+     How many tools?
+       |-- < 10 --> Single agent (no subagents)
+       |-- 10-30 --> Platform subagents (group by capability)
+       |-- > 30 --> Hierarchical decomposition
 ```
+
+### Additional Decision Factors
+
+Beyond tool count and domain boundaries, consider:
+
+| Factor | Single Agent | Subagents |
+|--------|--------------|-----------|
+| **Latency** | Need sub-100ms response | Can tolerate delegation overhead |
+| **Failure isolation** | All-or-nothing acceptable | Need independent failure domains |
+| **Cost** | Token budget limited | Can afford summarization overhead |
+| **Observability** | Simple tracing sufficient | Need per-domain visibility |
+
+> **Note**: The 10/30 tool thresholds align with cognitive load research (7±2 items). Adjust based on tool complexity—10 simple tools may be fine, while 5 complex tools might warrant decomposition.
 
 ## Design Process
 
@@ -368,14 +414,14 @@ Before finalizing architecture:
 
 ## Additional Resources
 
-### Reference Files
+### Related Skills
 
-For detailed patterns and step-by-step guidance:
+For detailed patterns and implementation guidance:
 
-- **`references/topology-patterns.md`** - 6 topology patterns with examples
-- **`references/capability-mapping.md`** - Complete capability mapping process
+- **`patterns/SKILL.md`** - Implementation patterns for prompts, tools, and security
+- **`patterns/references/anti-patterns.md`** - 16 anti-patterns with fixes
+- **`quickstart/SKILL.md`** - Quick start guide with code examples
 
 ### Commands
 
 Use `/design-topology` for interactive architecture design.
-Use `/map-capabilities` to map business capabilities to agents.

@@ -42,6 +42,8 @@ agent = create_deep_agent(
 
 The content of `AGENTS.md` is injected into the system prompt at session start. The agent can update it using `edit_file` when learning new patterns.
 
+> **Security Note**: Writable `AGENTS.md` is appropriate for internal/trusted agents only. For customer-facing agents, see [Security for Customer-Facing Agents](#security-for-customer-facing-agents) to prevent Persistent Prompt Injection attacks.
+
 ## Prompt Patterns by Agent Type
 
 ### Platform Subagent
@@ -351,11 +353,31 @@ Malicious user → Tricks agent → Writes to AGENTS.md
 
 ```python
 from deepagents import create_deep_agent
+import os
 
 # Production: AGENTS.md is read-only, loaded via memory
 agent = create_deep_agent(
     memory=["./.deepagents/AGENTS.md"],  # Read-only injection
     # Do NOT give edit_file access to AGENTS.md paths
+)
+
+# Defense-in-depth: Also protect at filesystem level
+os.chmod("./.deepagents/AGENTS.md", 0o444)  # Read-only at OS level
+```
+
+For additional enforcement, use path-based restrictions in your backend:
+
+```python
+from deepagents.backends import CompositeBackend, StateBackend, ReadOnlyBackend
+
+agent = create_deep_agent(
+    memory=["./.deepagents/AGENTS.md"],
+    backend=CompositeBackend(
+        default=StateBackend(),
+        routes={
+            ".deepagents/": ReadOnlyBackend(),  # Enforced read-only
+        },
+    ),
 )
 ```
 
@@ -402,15 +424,25 @@ agent = create_deep_agent(
 
 #### Strategy 4: Content Validation Wrapper
 
+> **Note**: Regex validation is a defense-in-depth measure, not a primary control. Sophisticated attacks can bypass pattern matching. Always combine with Strategy 1 (read-only AGENTS.md) for production deployments.
+
 ```python
+import os
 import re
-from langchain_core.tools import tool
+from langchain.tools import tool, ToolRuntime
 
 DANGEROUS_PATTERNS = [
     r"ignore.*(?:security|rules|restrictions)",
     r"bypass.*(?:checks|validation)",
     r"always.*(?:approve|allow|permit)",
     r"never.*(?:reject|deny|block)",
+    # Additional patterns for common injection attempts
+    r"disregard.*(?:safety|security|rules)",
+    r"pretend.*(?:unrestricted|no limits)",
+    r"override.*(?:safety|rules|instructions)",
+    r"from now on",
+    r"your new.*(?:behavior|instructions|role)",
+    r"skip.*(?:authentication|validation|checks)",
 ]
 
 def validate_memory_content(content: str) -> bool:
@@ -420,16 +452,28 @@ def validate_memory_content(content: str) -> bool:
             return False
     return True
 
+def validate_key(key: str) -> bool:
+    """Validate key contains no path traversal characters."""
+    return ".." not in key and "/" not in key and "\\" not in key
+
 @tool
 def safe_remember(key: str, value: str, runtime: ToolRuntime) -> dict:
     """Safely store user preference with validation."""
+    # Validate key to prevent path traversal attacks
+    if not validate_key(key):
+        return {"error": "Invalid key: path characters not allowed", "stored": False}
+
     if not validate_memory_content(value):
         return {"error": "Content validation failed", "stored": False}
 
-    # Write to user-specific memory, not AGENTS.md
-    path = f"/user_memory/{runtime.context.user_id}/{key}.txt"
-    write_file(path, value)
-    return {"stored": True, "path": path}
+    # Construct and validate path stays within user directory
+    base_path = f"/user_memory/{runtime.context.user_id}"
+    target_path = os.path.normpath(os.path.join(base_path, f"{key}.txt"))
+    if not target_path.startswith(os.path.normpath(base_path)):
+        return {"error": "Path traversal detected", "stored": False}
+
+    write_file(target_path, value)
+    return {"stored": True, "path": target_path}
 ```
 
 ### Security Checklist for Production
@@ -444,6 +488,64 @@ Before deploying customer-facing agents:
 - [ ] Audit logging for all file modifications
 - [ ] Rate limiting on memory operations
 - [ ] Regular review of stored user memories
+
+### Implementation: Rate Limiting
+
+```python
+from functools import wraps
+import time
+
+RATE_LIMIT = {}
+MAX_REQUESTS_PER_MINUTE = 10
+
+def rate_limited(func):
+    @wraps(func)
+    def wrapper(*args, runtime=None, **kwargs):
+        user_id = runtime.context.user_id
+        now = time.time()
+
+        if user_id not in RATE_LIMIT:
+            RATE_LIMIT[user_id] = []
+
+        # Remove entries older than 60 seconds
+        RATE_LIMIT[user_id] = [t for t in RATE_LIMIT[user_id] if now - t < 60]
+
+        if len(RATE_LIMIT[user_id]) >= MAX_REQUESTS_PER_MINUTE:
+            return {"error": "Rate limit exceeded", "retry_after": 60}
+
+        RATE_LIMIT[user_id].append(now)
+        return func(*args, runtime=runtime, **kwargs)
+    return wrapper
+
+@rate_limited
+@tool
+def safe_remember(key: str, value: str, runtime: ToolRuntime) -> dict:
+    # ... implementation
+```
+
+### Implementation: Audit Logging
+
+```python
+import logging
+import hashlib
+from datetime import datetime
+
+audit_logger = logging.getLogger("deepagents.audit")
+
+@tool
+def safe_remember(key: str, value: str, runtime: ToolRuntime) -> dict:
+    # Audit log before any modification
+    audit_logger.info({
+        "event": "memory_write",
+        "user_id": runtime.context.user_id,
+        "tenant_id": getattr(runtime.context, "tenant_id", "default"),
+        "key": key,
+        "value_hash": hashlib.sha256(value.encode()).hexdigest(),
+        "timestamp": datetime.utcnow().isoformat(),
+    })
+
+    # ... validation and write operation
+```
 
 ### Architecture: System vs User Context
 
@@ -567,7 +669,7 @@ For comprehensive patterns and examples:
 
 - **`references/prompt-patterns.md`** - 5 prompt patterns with templates
 - **`references/tool-patterns.md`** - Complete tool design guide
-- **`references/anti-patterns.md`** - 10 anti-patterns with fixes
+- **`references/anti-patterns.md`** - 16 anti-patterns with fixes
 
 ### Validation
 

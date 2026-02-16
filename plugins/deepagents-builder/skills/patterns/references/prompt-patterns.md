@@ -220,9 +220,11 @@ Instead of hardcoding all context in `system_prompt`, use `AGENTS.md` files for 
 ### Benefits
 
 - **Persistent**: Survives across sessions
-- **Editable**: Agent can self-update via `edit_file`
+- **Editable**: Agent can self-update via `edit_file` (internal agents only)
 - **Separation**: Role (code) vs context (file)
 - **Version control**: Track changes in git
+
+> **Security Note**: Writable `AGENTS.md` is appropriate for internal/trusted agents only. For customer-facing agents, see [Security for Customer-Facing Agents](../SKILL.md#security-for-customer-facing-agents) to prevent Persistent Prompt Injection attacks.
 
 ### Pattern: Minimal system_prompt + Rich AGENTS.md
 
@@ -319,11 +321,10 @@ The task tool allows you to spawn subagents.
 ✅ Constraints specified
 ✅ Context boundaries maintained
 
-## Templates by Type
+## Related Resources
 
-See `assets/prompt-templates/` for ready-to-use templates:
-- `platform-template.txt`
-- `specialist-template.txt`
-- `coordinator-template.txt`
-- `research-template.txt`
-- `enabling-template.txt`
+For more patterns and examples:
+
+- **`../SKILL.md`** - Main patterns documentation with security guidance
+- **`anti-patterns.md`** - 16 anti-patterns with fixes
+- **`tool-patterns.md`** - Tool design patterns

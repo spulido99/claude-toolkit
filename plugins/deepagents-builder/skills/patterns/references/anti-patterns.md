@@ -328,6 +328,8 @@ tools = [
 
 ## Anti-Pattern 13: Workflow-Shaped Tools
 
+> **Relation to #12**: This is the tool-level manifestation of Anti-Pattern 12 (Build-Then-Add-Agent). #12 addresses system architecture; #13 addresses individual tool design. Both stem from not designing for agent composability.
+
 **Symptom**: Tools bundle decision logic instead of being atomic primitives.
 
 **Example**:

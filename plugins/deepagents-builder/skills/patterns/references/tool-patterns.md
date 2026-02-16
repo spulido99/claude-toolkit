@@ -85,6 +85,134 @@ result = agent.invoke(
 - [ ] Use `interrupt_on` for destructive operations
 - [ ] Audit logging includes runtime context
 
+### Preventing Context Leakage
+
+Even with ToolRuntime, context can leak through error messages, logging, or return values:
+
+```python
+# ❌ BAD: Context leaks in error message
+raise ValueError(f"Failed for user {runtime.context.user_id}")
+
+# ✅ GOOD: Generic error, context in audit logs only
+raise ValueError("Operation failed. Check audit logs for details.")
+
+# ❌ BAD: Echoing context back to LLM
+return {"user_id": runtime.context.user_id, "data": result}
+
+# ✅ GOOD: Only return necessary data
+return {"data": result}
+```
+
+## ⚠️ CRITICAL: Shell/Execute Tool Security
+
+The built-in `shell` and `execute` tools are **extremely dangerous** for customer-facing agents. They enable:
+
+- Command injection attacks
+- File system read/write access
+- Network access and data exfiltration
+- Privilege escalation
+- Container/sandbox escape
+
+### Recommendation for Customer-Facing Agents
+
+**Option 1: Disable Entirely (Recommended)**
+
+Do not include `shell` or `execute` in your tools list for customer-facing agents.
+
+**Option 2: Command Allowlisting**
+
+If shell access is required, implement strict allowlisting:
+
+```python
+import shlex
+import subprocess
+from langchain.tools import tool, ToolRuntime
+
+ALLOWED_COMMANDS = ["ls", "cat", "grep", "wc", "head", "tail"]
+BLOCKED_ARGS = ["--", "-c", "|", ";", "&", ">", "<", "`", "$"]
+
+@tool
+def safe_execute(command: str, runtime: ToolRuntime) -> dict:
+    """Execute allowlisted commands only in sandboxed environment."""
+    # Parse command safely
+    try:
+        cmd_parts = shlex.split(command)
+    except ValueError as e:
+        return {"error": f"Invalid command syntax: {e}"}
+
+    if not cmd_parts:
+        return {"error": "Empty command"}
+
+    # Check command is allowlisted
+    if cmd_parts[0] not in ALLOWED_COMMANDS:
+        return {"error": f"Command not allowed: {cmd_parts[0]}"}
+
+    # Check for dangerous arguments
+    for arg in cmd_parts[1:]:
+        for blocked in BLOCKED_ARGS:
+            if blocked in arg:
+                return {"error": f"Blocked argument pattern: {blocked}"}
+
+    # Run in restricted sandbox
+    try:
+        result = subprocess.run(
+            cmd_parts,
+            capture_output=True,
+            timeout=30,
+            cwd="/sandbox",           # Restricted directory
+            env={},                   # No environment inheritance
+            user="nobody",            # Unprivileged user (Linux)
+        )
+        return {
+            "stdout": result.stdout.decode()[:10000],  # Limit output size
+            "stderr": result.stderr.decode()[:1000],
+            "returncode": result.returncode,
+        }
+    except subprocess.TimeoutExpired:
+        return {"error": "Command timed out after 30 seconds"}
+    except Exception as e:
+        return {"error": f"Execution failed: {type(e).__name__}"}
+```
+
+**Option 3: Containerized Execution**
+
+For maximum isolation, run commands in ephemeral containers:
+
+```python
+@tool
+def containerized_execute(command: str, runtime: ToolRuntime) -> dict:
+    """Execute command in isolated container."""
+    import docker
+
+    client = docker.from_env()
+    try:
+        result = client.containers.run(
+            "sandbox:latest",
+            command,
+            remove=True,
+            mem_limit="256m",
+            cpu_period=100000,
+            cpu_quota=50000,       # 50% CPU limit
+            network_disabled=True, # No network access
+            read_only=True,        # Read-only filesystem
+            timeout=30,
+        )
+        return {"output": result.decode()[:10000]}
+    except docker.errors.ContainerError as e:
+        return {"error": str(e)}
+```
+
+### Shell Security Checklist
+
+- [ ] `shell`/`execute` tools disabled for customer-facing agents
+- [ ] If required: command allowlist implemented
+- [ ] If required: dangerous argument patterns blocked
+- [ ] If required: sandboxed execution environment
+- [ ] If required: no environment variable inheritance
+- [ ] If required: timeout configured
+- [ ] If required: output size limited
+- [ ] If required: network access disabled
+
 ## Pattern 1: Simple Tool
 
 ```python
