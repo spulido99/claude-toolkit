@@ -65,7 +65,7 @@ from deepagents import create_deep_agent
 from langgraph.checkpoint.memory import MemorySaver
 
 agent = create_deep_agent(
-    model="claude-sonnet-4-5-20250929",
+    model="anthropic:claude-sonnet-4-20250514",
     system_prompt="You are a helpful assistant.",
     tools=[your_tools],
     checkpointer=MemorySaver()

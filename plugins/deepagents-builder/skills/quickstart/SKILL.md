@@ -142,32 +142,6 @@ Every agent automatically includes:
 
 > **Security Warning**: The `shell` and `execute` tools grant direct system access. Disable or restrict them for customer-facing agents. See [Shell Security](../patterns/references/tool-patterns.md#shell-execute-tool-security) for mitigation strategies.
 
-## Backend Configuration
-
-Control how filesystem operations work:
-
-| Backend | Purpose | Persistence |
-|---------|---------|-------------|
-| `StateBackend` | Default, in-memory | Ephemeral (conversation) |
-| `FilesystemBackend` | Local disk access | Permanent |
-| `StoreBackend` | Cross-conversation memory | Persistent |
-| `CompositeBackend` | Hybrid routing | Mixed |
-
-```python
-from deepagents import create_deep_agent
-from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
-from langgraph.store.memory import InMemoryStore
-
-# Hybrid: /memories/ persists, everything else is ephemeral
-agent = create_deep_agent(
-    store=InMemoryStore(),
-    backend=CompositeBackend(
-        default=StateBackend(),
-        routes={"/memories/": StoreBackend()},
-    ),
-)
-```
-
 ## When to Use DeepAgents
 
 ### Use DeepAgents When:
@@ -184,37 +158,6 @@ agent = create_deep_agent(
 - MVP/prototyping phase
 - Deterministic workflows (use scripts)
 - Single-purpose automation
-
-## Agent-Native Design Principles
-
-When building applications with DeepAgents, follow these principles:
-
-| Principle | Description |
-|-----------|-------------|
-| **Parity** | Agents can do everything users can via UI |
-| **Granularity** | Custom tools are atomic primitives |
-| **Composability** | New features via prompts, not code |
-| **Emergent Capability** | Agents discover creative compositions |
-| **Improvement Over Time** | Enhance via accumulated context, not code rewrites |
-
-### Quick Checklist
-
-Before shipping an agent-powered feature:
-
-- [ ] Can the agent do everything the UI can?
-- [ ] Are custom tools atomic (not workflow bundles)?
-- [ ] Could you add a new capability by just changing the prompt?
-- [ ] Have you tested what happens when users ask for unexpected things?
-
-## Cognitive Load Guidelines
-
-Choose architecture based on tool count:
-
-| Tools | Architecture |
-|-------|-------------|
-| < 10 | Single agent, no subagents |
-| 10-30 | Platform subagents (group by capability) |
-| > 30 | Domain-specialized subagents |
 
 ## Common Patterns
 
@@ -266,8 +209,13 @@ agent = create_deep_agent(model=model)
 
 After basic setup, explore:
 
-- **Architecture skill**: Design agent topologies and bounded contexts
-- **Patterns skill**: System prompts, tool design, anti-patterns
-- **Evolution skill**: Maturity model and refactoring strategies
+- **[Architecture](../architecture/SKILL.md)**: Design agent topologies and bounded contexts
+- **[Patterns](../patterns/SKILL.md)**: System prompts, tool design, anti-patterns
+- **[Evals](../evals/SKILL.md)**: Testing, benchmarking, and debugging
+- **[Evolution](../evolution/SKILL.md)**: Maturity model and refactoring strategies
 
-Use `/design-topology` command for guided architecture design.
+### Commands
+
+- `/new-sdk-app` - Scaffold a new DeepAgents project with dependencies and examples
+- `/design-topology` - Interactive guide to design optimal agent topology
+- `/validate-agent` - Check agent code for anti-patterns and security issues

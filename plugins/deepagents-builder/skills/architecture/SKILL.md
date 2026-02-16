@@ -433,9 +433,11 @@ Before finalizing architecture:
 
 For detailed patterns and implementation guidance:
 
-- **`patterns/SKILL.md`** - Implementation patterns for prompts, tools, and security
-- **`patterns/references/anti-patterns.md`** - 16 anti-patterns with fixes
-- **`quickstart/SKILL.md`** - Quick start guide with code examples
+- **[Patterns](../patterns/SKILL.md)** - Implementation patterns for prompts, tools, and security
+- **[Anti-Patterns](../patterns/references/anti-patterns.md)** - 16 anti-patterns with fixes
+- **[Quickstart](../quickstart/SKILL.md)** - Quick start guide with code examples
+- **[Evolution](../evolution/SKILL.md)** - Maturity model and refactoring strategies
+- **[Evals](../evals/SKILL.md)** - Testing, benchmarking, and debugging
 
 ### Commands
 

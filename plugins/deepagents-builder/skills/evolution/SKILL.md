@@ -253,10 +253,15 @@ subagents=[
 
 ### Reference Files
 
-For detailed maturity assessment and refactoring strategies:
+- **[Maturity Model](references/maturity-model.md)** - Complete maturity model with metrics
+- **[Refactoring Patterns](references/refactoring-patterns.md)** - Detailed refactoring techniques
 
-- **`references/maturity-model.md`** - Complete maturity model with metrics
-- **`references/refactoring-patterns.md`** - Detailed refactoring techniques
+### Related Skills
+
+- **[Quickstart](../quickstart/SKILL.md)** - Getting started with DeepAgents
+- **[Architecture](../architecture/SKILL.md)** - Agent topologies and bounded contexts
+- **[Patterns](../patterns/SKILL.md)** - System prompts, tool design, anti-patterns
+- **[Evals](../evals/SKILL.md)** - Testing and benchmarking
 
 ### Commands
 

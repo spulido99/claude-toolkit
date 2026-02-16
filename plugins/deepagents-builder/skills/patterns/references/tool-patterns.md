@@ -179,31 +179,7 @@ def safe_execute(command: str, runtime: ToolRuntime) -> dict:
 
 **Option 3: Containerized Execution**
 
-For maximum isolation, run commands in ephemeral containers:
-
-```python
-@tool
-def containerized_execute(command: str, runtime: ToolRuntime) -> dict:
-    """Execute command in isolated container."""
-    import docker
-
-    client = docker.from_env()
-    try:
-        result = client.containers.run(
-            "sandbox:latest",
-            command,
-            remove=True,
-            mem_limit="256m",
-            cpu_period=100000,
-            cpu_quota=50000,       # 50% CPU limit
-            network_disabled=True, # No network access
-            read_only=True,        # Read-only filesystem
-            timeout=30,
-        )
-        return {"output": result.decode()[:10000]}
-    except docker.errors.ContainerError as e:
-        return {"error": str(e)}
-```
+For maximum isolation, run commands in ephemeral containers with memory limits, no network access, and read-only filesystem. Use the Docker SDK (`docker-py`) or a sandboxing service like E2B, Modal, or Daytona.
 
 ### Shell Security Checklist
 
@@ -238,59 +214,27 @@ def search_products(query: str, max_results: int = 10) -> list[dict]:
     # Implementation
 ```
 
-## Pattern 2: Complex Tool with Schema
+## Pattern 2: Complex Tool with Nested Parameters
 
 ```python
-{
-    "type": "function",
-    "function": {
-        "name": "create_marketing_campaign",
-        "description": "Create a new marketing campaign with budget allocation and targeting parameters",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "description": "Unique campaign name (required)"
-                },
-                "budget": {
-                    "type": "number",
-                    "description": "Total campaign budget in USD (required)",
-                    "minimum": 100
-                },
-                "duration_days": {
-                    "type": "integer",
-                    "description": "Campaign duration in days (default: 30)",
-                    "default": 30,
-                    "minimum": 1,
-                    "maximum": 365
-                },
-                "targeting": {
-                    "type": "object",
-                    "description": "Audience targeting parameters",
-                    "properties": {
-                        "age_range": {
-                            "type": "array",
-                            "items": {"type": "integer"},
-                            "description": "[min_age, max_age]"
-                        },
-                        "interests": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "List of interest categories"
-                        },
-                        "locations": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "Geographic regions (city, state, country)"
-                        }
-                    }
-                }
-            },
-            "required": ["name", "budget"]
-        }
-    }
-}
+@tool
+def create_marketing_campaign(
+    name: str,
+    budget: float,
+    duration_days: int = 30,
+    targeting: dict | None = None
+) -> dict:
+    """Create a new marketing campaign with budget allocation.
+
+    Args:
+        name: Unique campaign name
+        budget: Total budget in USD (minimum 100)
+        duration_days: Campaign duration (default: 30, max: 365)
+        targeting: Optional dict with age_range, interests, locations
+
+    Returns:
+        Campaign confirmation with ID and status
+    """
 ```
 
 ## Pattern 3: Tool with Enum Values
@@ -419,19 +363,21 @@ def api_call_with_retry(endpoint: str, max_retries: int = 3) -> dict:
 
 ## Tool Composition Patterns
 
-### Pattern: Composite Tool
+### Pattern: Domain Shortcut (alongside atomic tools)
+
+> **Note**: This is a convenience shortcut, not a replacement for atomic tools. Always provide the atomic primitives alongside shortcuts so the agent can compose custom flows. See [Anti-Pattern #13](anti-patterns.md) for why workflow-shaped tools that *replace* atomic tools are harmful.
 
 ```python
+# Atomic tools (always available)
+tools = [validate_data, perform_analysis, store_results]
+
+# PLUS a convenience shortcut for the most common workflow
 @tool
 def analyze_and_store(data: dict) -> dict:
-    """Analyze data and store results (composite operation).
-    
-    This tool combines:
-    1. validate_data()
-    2. perform_analysis()
-    3. store_results()
-    
-    Use this for common workflow; use individual tools for custom flows.
+    """Shortcut: validate, analyze, and store in one call.
+
+    For custom flows, use validate_data, perform_analysis,
+    and store_results individually.
     """
 ```
 

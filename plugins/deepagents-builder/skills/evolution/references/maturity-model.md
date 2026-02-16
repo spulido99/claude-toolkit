@@ -161,23 +161,7 @@ agent = create_deep_agent(
 - Continuous optimization based on metrics
 - A/B testing different topologies
 
-**Example:**
-```python
-agent = EvolutionaryDeepAgent(
-    base_capabilities=[...],
-    optimization_goals={
-        "minimize": "token_usage",
-        "maximize": "success_rate"
-    },
-    auto_discover_capabilities=True
-)
-```
-
-**Improvements:**
-- Automatic evolution
-- Self-optimization
-- Adapts to changing requirements
-- Minimal manual intervention
+**This is an aspirational target.** No framework currently provides fully automatic agent evolution. Achieve this incrementally by combining Level 4 metrics with configuration-driven architectures and A/B testing (see [Refactoring Patterns](../references/refactoring-patterns.md)).
 
 ---
 

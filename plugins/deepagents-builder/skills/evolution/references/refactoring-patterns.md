@@ -361,30 +361,9 @@ After refactoring:
 - [ ] Update team knowledge
 - [ ] Monitor for regressions
 
-## Migration Strategies
+## Migration Strategy
 
-### Big Bang (Not Recommended)
-Rebuild entire architecture at once
-- High risk
-- All-or-nothing
-- Difficult to debug
-
-### Strangler Pattern (Recommended)
-Gradually replace old with new
-1. Add new subagent alongside old
-2. Route subset of traffic to new
-3. Monitor and compare
-4. Gradually increase traffic
-5. Remove old when confident
-
-### Feature Flag Pattern
-Toggle between architectures
-```python
-if config["use_new_topology"]:
-    agent = create_new_topology()
-else:
-    agent = create_old_topology()
-```
+**Recommended: Incremental replacement.** Add new subagents alongside existing ones, route traffic gradually, and remove old ones when confident. Avoid rebuilding the entire architecture at once.
 
 ## Testing Refactored Agents
 

@@ -365,7 +365,7 @@ For complete mitigation strategies (4 strategies), content validation, rate limi
 
 ## Anti-Patterns to Avoid
 
-The most common mistakes: God Agent (50+ tools in one agent), Unclear Boundaries (overlapping subagent responsibilities), Parallel Decision-Making (conflicting choices), Vocabulary Collision (same term means different things), and Premature Decomposition (over-splitting simple tasks).
+The most common mistakes: God Agent (> 30 tools in one agent), Unclear Boundaries (overlapping subagent responsibilities), Parallel Decision-Making (conflicting choices), Vocabulary Collision (same term means different things), and Premature Decomposition (over-splitting simple tasks).
 
 For the complete catalog of 16 anti-patterns with code examples and fixes, see **[`references/anti-patterns.md`](references/anti-patterns.md)**.
 
@@ -398,10 +398,17 @@ Before finalizing tools:
 
 For comprehensive patterns and examples:
 
-- **`references/prompt-patterns.md`** - 5 prompt patterns with templates
-- **`references/tool-patterns.md`** - Complete tool design guide
-- **`references/anti-patterns.md`** - 16 anti-patterns with fixes
-- **`references/security-patterns.md`** - Security strategies for customer-facing agents
+- **[Prompt Patterns](references/prompt-patterns.md)** - 5 prompt patterns with templates
+- **[Tool Patterns](references/tool-patterns.md)** - Complete tool design guide
+- **[Anti-Patterns](references/anti-patterns.md)** - 16 anti-patterns with fixes
+- **[Security Patterns](references/security-patterns.md)** - Security strategies for customer-facing agents
+
+### Related Skills
+
+- **[Quickstart](../quickstart/SKILL.md)** - Getting started with DeepAgents
+- **[Architecture](../architecture/SKILL.md)** - Agent topologies and bounded contexts
+- **[Evolution](../evolution/SKILL.md)** - Maturity model and refactoring
+- **[Evals](../evals/SKILL.md)** - Testing and benchmarking
 
 ### Validation
 

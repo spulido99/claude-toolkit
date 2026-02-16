@@ -272,6 +272,15 @@ LangSmith's AI assistant helps:
 
 ## Additional Resources
 
+### Related Skills
+
+- **[Quickstart](../quickstart/SKILL.md)** - Getting started with DeepAgents
+- **[Architecture](../architecture/SKILL.md)** - Agent topologies and bounded contexts
+- **[Patterns](../patterns/SKILL.md)** - System prompts, tool design, anti-patterns
+- **[Evolution](../evolution/SKILL.md)** - Maturity model and refactoring
+
+### External Resources
+
 - [Evaluating Deep Agents: Our Learnings](https://www.blog.langchain.com/evaluating-deep-agents-our-learnings/)
 - [Debugging Deep Agents with LangSmith](https://www.blog.langchain.com/debugging-deep-agents-with-langsmith/)
 - [Terminal Bench 2.0 Documentation](https://github.com/langchain-ai/deepagents/tree/master/libs/harbor)

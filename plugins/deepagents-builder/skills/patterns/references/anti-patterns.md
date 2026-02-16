@@ -36,7 +36,7 @@ subagents = [
 
 ## Anti-Pattern 2: God Agent
 
-**Symptom**: Single agent with 50+ tools, poor tool selection.
+**Symptom**: Single agent with > 30 tools, poor tool selection.
 
 **Example**:
 ```python
