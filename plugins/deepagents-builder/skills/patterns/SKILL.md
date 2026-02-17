@@ -20,31 +20,58 @@ Every agent prompt should include:
 [Escalation/Stopping Criteria]
 ```
 
-### system_prompt vs AGENTS.md
+### `prompt=` parameter vs `context_schema` runtime context
 
-Both provide instructions that become part of the agent's system prompt:
+Both provide instructions/context to the agent, but serve different purposes:
 
-| Use `system_prompt` for | Use `AGENTS.md` (via `memory`) for |
-|------------------------|-----------------------------------|
-| Core role definition | Persistent preferences |
-| Hardcoded behavior | User-adjustable settings |
-| Subagent-specific logic | Project context |
-| Static workflows | Learnable patterns |
+| Use `prompt=` parameter for | Use `context_schema` runtime context for |
+|----------------------------|----------------------------------------|
+| Core role definition | Per-request dynamic context |
+| Hardcoded behavior | User-specific data (IDs, keys) |
+| Subagent-specific logic | Session-specific settings |
+| Static workflows | Runtime-injected variables |
 
-**File-first approach** (recommended for production):
+**Context-driven approach** (recommended for production):
 
 ```python
-agent = create_deep_agent(
-    memory=["./.deepagents/AGENTS.md"],  # Context from file
-    system_prompt="You are a support coordinator."  # Minimal role
+from langgraph.prebuilt import create_react_agent
+from langgraph.prebuilt import InjectedState
+from dataclasses import dataclass
+from typing import Annotated
+from langchain_core.tools import tool
+
+@dataclass
+class AgentContext:
+    tenant_id: str
+    preferences: dict
+
+@tool
+def get_tenant_config(
+    state: Annotated[dict, InjectedState],
+) -> dict:
+    """Get tenant-specific configuration from injected state."""
+    return load_config(state.get("tenant_id"))
+
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[get_tenant_config],
+    prompt="You are a support coordinator.",  # Static role
+    context_schema=AgentContext,              # Dynamic context
+)
+
+result = agent.invoke(
+    {"messages": [...]},
+    context=AgentContext(tenant_id="t_123", preferences={"lang": "en"}),
 )
 ```
 
-The content of `AGENTS.md` is injected into the system prompt at session start. The agent can update it using `edit_file` when learning new patterns.
+The `prompt=` parameter defines the agent's static role and behavior. The `context_schema` injects per-request dynamic context accessible via `InjectedState` in tools.
 
-> **Security Note**: Writable `AGENTS.md` is appropriate for internal/trusted agents only. For customer-facing agents, see [Security for Customer-Facing Agents](#security-for-customer-facing-agents) to prevent Persistent Prompt Injection attacks.
+> **Security Note**: Runtime context via `context_schema` is injected server-side and never exposed to the LLM as tool parameters. For customer-facing agents, see [Security for Customer-Facing Agents](#security-for-customer-facing-agents) to prevent prompt injection attacks.
 
 ## Prompt Patterns by Agent Type
+
+> **Note**: The `system_prompt` key in the example config dicts below maps to the `prompt=` parameter when calling `create_react_agent`.
 
 ### Platform Subagent
 
@@ -104,22 +131,44 @@ Deep expertise, specific vocabulary.
 
 ### Coordinator/Orchestrator
 
-Delegates, doesn't execute.
+Delegates, doesn't execute. Uses the "agent as tool" pattern where subagents become tools for the parent:
 
 ```python
-{
-    "name": "support-coordinator",
-    "system_prompt": """You coordinate support operations.
+from langgraph.prebuilt import create_react_agent
+from langchain_core.tools import tool
 
-## Your Team
-- inquiry-handler: Questions, information
-- issue-resolver: Problems, complaints
-- order-specialist: Orders, tracking
+# Create specialist agents
+inquiry_handler = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[kb_search, get_faq],
+    prompt="You answer customer questions using the knowledge base.",
+    name="inquiry-handler",
+)
+
+issue_resolver = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[lookup_issue, create_ticket],
+    prompt="You resolve customer issues and create support tickets.",
+    name="issue-resolver",
+)
+
+order_specialist = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[track_order, process_return],
+    prompt="You handle order tracking and returns.",
+    name="order-specialist",
+)
+
+# Parent coordinator uses subagents as tools
+coordinator = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[inquiry_handler, issue_resolver, order_specialist],
+    prompt="""You coordinate support operations.
 
 ## You Do NOT
-- Answer questions directly (delegate)
-- Resolve issues yourself (delegate)
-- Process orders yourself (delegate)
+- Answer questions directly (delegate to inquiry-handler)
+- Resolve issues yourself (delegate to issue-resolver)
+- Process orders yourself (delegate to order-specialist)
 
 ## You DO
 - Understand full context
@@ -130,8 +179,8 @@ Delegates, doesn't execute.
 ## Escalation Criteria
 - Customer requests human
 - Issue unresolved after 3 attempts
-- Refund > $500"""
-}
+- Refund > $500""",
+)
 ```
 
 ## Checkpointer & Human-in-the-Loop
@@ -141,12 +190,13 @@ Delegates, doesn't execute.
 Use `MemorySaver` for conversation persistence and HITL:
 
 ```python
-from deepagents import create_deep_agent
+from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 
-agent = create_deep_agent(
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
     tools=[...],
-    checkpointer=MemorySaver()  # Required for interrupt_on
+    checkpointer=MemorySaver()  # Required for interrupt_before
 )
 
 # Use thread_id for conversation persistence
@@ -157,26 +207,26 @@ result = agent.invoke({"messages": [...]}, config)
 ### Human-in-the-Loop for Sensitive Tools
 
 ```python
-agent = create_deep_agent(
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
     tools=[delete_database, read_database],
     checkpointer=MemorySaver(),
-    interrupt_on={
-        "delete_database": {
-            "allowed_decisions": ["approve", "edit", "reject"]
-        }
-    }
+    interrupt_before=["delete_database"],  # Pause before destructive ops
 )
 
 # Agent pauses before delete_database, awaits human decision
-for event in agent.stream({...}, config, stream_mode="values"):
+config = {"configurable": {"thread_id": "session-1"}}
+for event in agent.stream({"messages": [...]}, config, stream_mode="values"):
     if "__interrupt__" in event:
-        decision = input("Approve? (approve/reject): ")
-        agent.update_state(config, {"decision": decision})
+        # Review and approve or reject
+        decision = input("Approve? (y/n): ")
+        if decision == "y":
+            agent.invoke(None, config)  # Resume execution
 ```
 
 ### Completion Signals
 
-DeepAgents provides `write_todos` for task tracking. For custom completion needs, add an explicit signal tool:
+For task tracking, add an explicit signal tool:
 
 ```python
 @tool
@@ -200,17 +250,20 @@ def search_knowledge_base(query: str) -> list[dict]:
     pass
 ```
 
-### Secure Tools with ToolRuntime (Recommended)
+### Secure Tools with `context_schema` + `InjectedState` (Recommended)
 
-Never pass user identifiers as parameters. Use `ToolRuntime` for context injection:
+Never pass user identifiers as parameters. Use `context_schema` with `InjectedState` for context injection:
 
 ```python
 import os
 from dataclasses import dataclass
-from langchain.tools import tool, ToolRuntime
+from typing import Annotated
+from langchain_core.tools import tool
+from langgraph.prebuilt import create_react_agent
+from langgraph.prebuilt import InjectedState
 
 @dataclass
-class Context:
+class SecureContext:
     user_id: str
     api_key: str
 
@@ -220,23 +273,27 @@ def get_account_bad(user_id: str) -> str:
     """Insecure: user_id exposed to LLM."""
     pass
 
-# Good: user_id from runtime context
+# Good: user_id from injected state context
 @tool
-def get_account_info(runtime: ToolRuntime[Context]) -> str:
-    """Get account info using secure runtime context."""
-    user_id = runtime.context.user_id  # Injected, not from LLM
+def get_account_info(
+    state: Annotated[dict, InjectedState],
+) -> str:
+    """Get account info using injected state."""
+    # Access context from state - not visible to LLM
+    user_id = state.get("user_id")
     return fetch_from_db(user_id)
 
 # Create agent with context schema
-agent = create_deep_agent(
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
     tools=[get_account_info],
-    context_schema=Context
+    context_schema=SecureContext,
 )
 
 # Invoke with context (not visible to LLM)
 result = agent.invoke(
     {"messages": [...]},
-    context=Context(user_id="user_123", api_key=os.environ["SERVICE_API_KEY"])
+    context=SecureContext(user_id="user_123", api_key=os.environ["SERVICE_API_KEY"]),
 )
 ```
 
@@ -276,7 +333,7 @@ return {
 
 Custom tools should be atomic primitives, not workflow bundles. Let the agent compose them.
 
-### ❌ Bad: Workflow-Shaped Tool
+### Bad: Workflow-Shaped Tool
 
 ```python
 @tool
@@ -291,7 +348,7 @@ def handle_customer_request(request: str) -> str:
     # Agent has no visibility or control
 ```
 
-### ✅ Good: Atomic Primitives
+### Good: Atomic Primitives
 
 ```python
 @tool
@@ -306,7 +363,7 @@ def get_relevant_articles(category: str, keywords: list[str]) -> list[dict]:
 def send_response(message: str, channel: str) -> bool:
     """Send response through specified channel."""
 
-# Agent composes: classify → get_articles → formulate answer → send
+# Agent composes: classify -> get_articles -> formulate answer -> send
 # Agent can skip steps, retry failures, or handle edge cases creatively
 ```
 
@@ -328,38 +385,72 @@ tools = [
 
 ## Security Model
 
-DeepAgents uses "trust the LLM" model. Implement security at tool/sandbox level:
+LangGraph uses a secure-by-default model. Implement security at tool/context level:
 
 - **Never** expose user IDs, API keys, or credentials as tool parameters
-- **Always** use `ToolRuntime` for context injection
-- **Configure** `interrupt_on` for destructive operations
+- **Always** use `context_schema` + `InjectedState` for context injection
+- **Configure** `interrupt_before` for destructive operations
 - **Sandbox** agent execution for untrusted tasks
 
 ## Security for Customer-Facing Agents
 
-When deploying agents to end users, the key risk is **Persistent Prompt Injection** — a malicious user tricks the agent into writing adversarial instructions to AGENTS.md, affecting all future sessions.
+When deploying agents to end users, the key risk is **Prompt Injection** -- a malicious user tricks the agent into performing unintended actions or leaking sensitive data.
 
-**Recommended mitigation**: Make AGENTS.md **read-only** in production. Isolate user memory per-user using `StoreBackend`.
+**Recommended mitigation**: Use `context_schema` for per-user isolation and `InjectedState` to keep sensitive data out of LLM-visible parameters. Combine with `interrupt_before` for destructive operations.
 
 ```python
-from deepagents import create_deep_agent
-from deepagents.backends import CompositeBackend, StateBackend, ReadOnlyBackend
+from langgraph.prebuilt import create_react_agent, InjectedState
+from langgraph.checkpoint.memory import MemorySaver
+from dataclasses import dataclass
+from typing import Annotated
+from langchain_core.tools import tool
 
-agent = create_deep_agent(
-    memory=["./.deepagents/AGENTS.md"],  # Read-only injection
-    backend=CompositeBackend(
-        default=StateBackend(),
-        routes={".deepagents/": ReadOnlyBackend()},  # Enforced read-only
-    ),
+@dataclass
+class UserContext:
+    user_id: str
+    permissions: list[str]
+
+@tool
+def get_user_data(
+    state: Annotated[dict, InjectedState],
+) -> dict:
+    """Get user data using injected context - user_id never exposed to LLM."""
+    user_id = state.get("user_id")
+    return fetch_user_data(user_id)
+
+@tool
+def delete_user_data(
+    state: Annotated[dict, InjectedState],
+    confirmation: str,
+) -> dict:
+    """Delete user data - requires human approval via interrupt."""
+    if "admin" not in state.get("permissions", []):
+        return {"error": "insufficient permissions"}
+    return perform_deletion(state.get("user_id"))
+
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[get_user_data, delete_user_data],
+    context_schema=UserContext,
+    checkpointer=MemorySaver(),
+    interrupt_before=["delete_user_data"],  # Human approval required
+)
+
+# Each user gets isolated context
+result = agent.invoke(
+    {"messages": [...]},
+    context=UserContext(user_id="user_456", permissions=["read"]),
+    config={"configurable": {"thread_id": "user_456_session"}},
 )
 ```
 
 ### Security Checklist for Production
 
-- [ ] AGENTS.md is read-only (no edit_file access)
-- [ ] User memory is isolated per-user (not shared)
-- [ ] `interrupt_on` configured for sensitive paths
-- [ ] Rate limiting on memory operations
+- [ ] Sensitive data injected via `context_schema`, never as tool parameters
+- [ ] User context is isolated per-user (not shared)
+- [ ] `interrupt_before` configured for destructive operations
+- [ ] Rate limiting on agent invocations
+- [ ] Tool permissions scoped per user role
 
 For complete mitigation strategies (4 strategies), content validation, rate limiting, and audit logging implementations, see **[`references/security-patterns.md`](references/security-patterns.md)**.
 
@@ -398,6 +489,7 @@ Before finalizing tools:
 
 For comprehensive patterns and examples:
 
+- **[API Cheatsheet](references/api-cheatsheet.md)** - Current LangGraph API quick reference
 - **[Prompt Patterns](references/prompt-patterns.md)** - 5 prompt patterns with templates
 - **[Tool Patterns](references/tool-patterns.md)** - Complete tool design guide
 - **[Anti-Patterns](references/anti-patterns.md)** - 16 anti-patterns with fixes
@@ -409,6 +501,7 @@ For comprehensive patterns and examples:
 - **[Architecture](../architecture/SKILL.md)** - Agent topologies and bounded contexts
 - **[Evolution](../evolution/SKILL.md)** - Maturity model and refactoring
 - **[Evals](../evals/SKILL.md)** - Testing and benchmarking
+- **[Tool Design](../tool-design/SKILL.md)** - AI-friendly tool design principles
 
 ### Validation
 
