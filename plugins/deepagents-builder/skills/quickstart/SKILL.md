@@ -9,17 +9,19 @@ Build production-ready deep agents with planning, context management, and subage
 
 ## What is DeepAgents?
 
-DeepAgents is a Python library from LangChain that implements patterns from Claude Code, Deep Research, and Manus. It provides:
+DeepAgents is a set of patterns and skills built on **LangGraph**, LangChain's framework for building agentic applications. The core function is `create_react_agent` from `langgraph.prebuilt`, which implements LangGraph's agent loop — a cycle of reasoning and tool execution that continues until the agent produces a final response.
 
-- **Planning tools** (`write_todos`) - Break complex tasks into steps
-- **File system** - Manage context with `read_file`, `write_file`, `edit_file`
-- **Subagents** - Delegate tasks with isolated context
-- **Auto-summarization** - Handle conversations exceeding 170K tokens
+It provides:
+
+- **ReAct agent loop** — Automatic reasoning + tool calling via `create_react_agent`
+- **Tool composition** — Add any LangChain tool or custom function
+- **Agent-as-tool** — Nest agents as tools for subagent delegation
+- **Checkpointing** — Persist conversation state with `MemorySaver` or database backends
 
 ## Installation
 
 ```bash
-pip install deepagents
+pip install langgraph langchain-core langchain-anthropic
 ```
 
 ## Quick Start
@@ -27,23 +29,24 @@ pip install deepagents
 ### Minimal Agent
 
 ```python
-from deepagents import create_deep_agent
+from langgraph.prebuilt import create_react_agent
 
-# Default model is anthropic:claude-sonnet-4-20250514
-agent = create_deep_agent()
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    prompt="You are a helpful research assistant.",
+    tools=[],
+)
 
 result = agent.invoke({
     "messages": [{"role": "user", "content": "Research AI trends"}]
 })
-
-# Access response
 print(result["messages"][-1].content)
 ```
 
 ### Agent with Custom Tools
 
 ```python
-from deepagents import create_deep_agent
+from langgraph.prebuilt import create_react_agent
 from langchain_core.tools import tool
 
 @tool
@@ -51,96 +54,76 @@ def search_web(query: str) -> str:
     """Search the web for information."""
     return f"Results for: {query}"
 
-agent = create_deep_agent(
+agent = create_react_agent(
     model="anthropic:claude-sonnet-4-20250514",
     tools=[search_web],
-    system_prompt="You are a research assistant."
+    prompt="You are a research assistant.",
 )
 ```
 
 ### Agent with Subagents
 
-```python
-from deepagents import create_deep_agent
+Use the "agent as tool" pattern — create a specialist agent, then pass it as a tool to the parent:
 
-agent = create_deep_agent(
+```python
+from langgraph.prebuilt import create_react_agent
+
+# Create specialist as standalone agent
+researcher = create_react_agent(
+    model="openai:gpt-4o",
+    tools=[search_web],
+    prompt="You are an expert researcher. Summarize findings concisely. Keep responses under 500 tokens.",
+    name="researcher",
+)
+
+# Use specialist as tool in parent agent
+agent = create_react_agent(
     model="anthropic:claude-sonnet-4-20250514",
-    system_prompt="You coordinate research projects.",
-    subagents=[
-        {
-            "name": "researcher",
-            "description": "Conducts in-depth research on topics",
-            "system_prompt": "You are an expert researcher. Summarize findings concisely. Keep responses under 500 tokens.",
-            "tools": [search_web],
-            "model": "openai:gpt-4o"  # Optional: different model per subagent
-        }
-    ]
+    tools=[researcher],  # Agent used as tool
+    prompt="You coordinate research projects. Delegate research to the researcher tool.",
 )
 ```
 
-### Agent with AGENTS.md Memory (File-First)
+### Agent with Context and Memory
 
-Use `AGENTS.md` files for persistent context that gets injected into the system prompt:
+Use `context_schema` to inject structured context and `checkpointer` for conversation persistence:
 
 ```python
-from deepagents import create_deep_agent
-from deepagents.backends import FilesystemBackend
+from langgraph.prebuilt import create_react_agent
+from langgraph.checkpoint.memory import MemorySaver
+from dataclasses import dataclass
 
-agent = create_deep_agent(
-    backend=FilesystemBackend(root_dir="./"),  # Scope to project directory
-    memory=[
-        "~/.deepagents/AGENTS.md",      # Global preferences
-        "./.deepagents/AGENTS.md",      # Project-specific context
-    ],
-    system_prompt="You are a project assistant."  # Minimal role definition
+@dataclass
+class ProjectContext:
+    project_name: str
+    preferences: dict
+
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[...],
+    prompt="You are a project assistant.",
+    context_schema=ProjectContext,
+    checkpointer=MemorySaver(),
+)
+
+# Invoke with context (invisible to LLM)
+result = agent.invoke(
+    {"messages": [...]},
+    context=ProjectContext(project_name="my-project", preferences={"format": "markdown"}),
 )
 ```
 
-> **Security Warning**: Never use `root_dir="/"` — it grants the agent read/write access to your entire filesystem. Always scope to the project directory or a dedicated workspace.
+## Tools in LangGraph
 
-Create `.deepagents/AGENTS.md` in your project:
+LangGraph agents don't include built-in tools — you provide all tools via the `tools=` parameter. Tools can be:
 
-```markdown
-# Project Context
+- **`@tool` decorated functions** — Any Python function with a docstring
+- **LangChain tools** — From `langchain-community` or other integrations
+- **Other agents** — Using the agent-as-tool pattern shown above
 
-## Role
-Research assistant for market analysis.
+This gives you full control over what your agent can and cannot do.
 
-## Preferences
-- Output format: Markdown tables
-- Always cite sources
-- Tone: Professional, concise
-
-## Resources
-- /data/reports/ - Historical reports
-- /config/sources.json - Data sources
-```
-
-**For internal/trusted agents only:** The agent can update `AGENTS.md` using `edit_file` when learning new preferences. By default, treat `AGENTS.md` as read-only.
-
-> **Security Note**: Writable `AGENTS.md` is appropriate for internal/trusted agents only. For customer-facing agents, see [Security for Customer-Facing Agents](../patterns/SKILL.md#security-for-customer-facing-agents) to prevent Persistent Prompt Injection attacks.
-
-## Built-in Tools (Automatic)
-
-Every agent automatically includes:
-
-| Tool | Purpose |
-|------|---------|
-| `write_todos` | Create structured task lists |
-| `read_todos` | View current tasks |
-| `ls` | List directory contents |
-| `read_file` | Read file content |
-| `write_file` | Create/overwrite files |
-| `edit_file` | Exact string replacements |
-| `glob` | Find files by pattern |
-| `grep` | Search text in files |
-| `execute` | Run commands in sandbox |
-| `shell` | Run local shell commands |
-| `web_search` | Search the web |
-| `fetch_url` | Fetch URL content |
-| `task` | Delegate to subagents |
-
-> **Security Warning**: The `shell` and `execute` tools grant direct system access. Disable or restrict them for customer-facing agents. See [Shell Security](../patterns/references/tool-patterns.md#shell-execute-tool-security) for mitigation strategies.
+> **Security Tip**: Use `interrupt_before` on dangerous tools to require human confirmation before execution. Use `context_schema` to pass user identity and permissions as structured context, rather than embedding user IDs in tool parameters.
 
 ## When to Use DeepAgents
 
@@ -164,26 +147,50 @@ Every agent automatically includes:
 ### Research Agent
 
 ```python
-agent = create_deep_agent(
-    system_prompt="""You conduct comprehensive research.
-    1. Plan research steps with write_todos
+from langgraph.prebuilt import create_react_agent
+
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    prompt="""You conduct comprehensive research.
+    1. Plan research steps
     2. Search for information
-    3. Save findings to files
-    4. Synthesize into final report""",
-    tools=[search_tool]
+    3. Synthesize into final report""",
+    tools=[search_tool],
 )
 ```
 
 ### Customer Support Agent
 
 ```python
-agent = create_deep_agent(
-    system_prompt="You coordinate customer support.",
-    subagents=[
-        {"name": "inquiry-handler", "description": "Answers questions"},
-        {"name": "issue-resolver", "description": "Resolves problems"},
-        {"name": "order-specialist", "description": "Manages orders"}
-    ]
+from langgraph.prebuilt import create_react_agent
+
+# Create specialist agents
+inquiry_handler = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[knowledge_base_tool],
+    prompt="You answer customer questions accurately.",
+    name="inquiry-handler",
+)
+
+issue_resolver = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[ticketing_tool],
+    prompt="You resolve customer problems.",
+    name="issue-resolver",
+)
+
+order_specialist = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[order_tool],
+    prompt="You manage customer orders.",
+    name="order-specialist",
+)
+
+# Coordinator delegates to specialists
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[inquiry_handler, issue_resolver, order_specialist],
+    prompt="You coordinate customer support. Route inquiries to the appropriate specialist.",
 )
 ```
 
@@ -192,18 +199,73 @@ agent = create_deep_agent(
 ```python
 from langchain.chat_models import init_chat_model
 
-# Claude (default)
+# Claude (recommended)
 model = init_chat_model("anthropic:claude-sonnet-4-20250514")
 
 # OpenAI
-model = init_chat_model("openai:gpt-4-turbo")
+model = init_chat_model("openai:gpt-4o")
 
 # Google
-from langchain_google_genai import ChatGoogleGenerativeAI
-model = ChatGoogleGenerativeAI(model="gemini-3-pro")
+model = init_chat_model("google_genai:gemini-2.0-flash")
 
-agent = create_deep_agent(model=model)
+agent = create_react_agent(model=model, tools=[...])
 ```
+
+## Interactive Chat Console
+
+Test your agent interactively with tool call logging:
+
+```python
+# chat.py
+import uuid
+from langgraph.prebuilt import create_react_agent
+from langgraph.checkpoint.memory import MemorySaver
+
+def create_my_agent():
+    return create_react_agent(
+        model="anthropic:claude-sonnet-4-20250514",
+        tools=[...],
+        prompt="Your system prompt here.",
+        checkpointer=MemorySaver(),
+    )
+
+def main():
+    agent = create_my_agent()
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+
+    print("Chat with your agent (type 'exit' to quit, 'new' for new thread)")
+    while True:
+        user_input = input("\nYou: ").strip()
+        if not user_input:
+            continue
+        if user_input.lower() in ("exit", "quit", "salir"):
+            break
+        if user_input.lower() in ("new", "nuevo"):
+            thread_id = str(uuid.uuid4())
+            config = {"configurable": {"thread_id": thread_id}}
+            print(f"  New thread: {thread_id[:8]}...")
+            continue
+
+        result = agent.invoke(
+            {"messages": [{"role": "user", "content": user_input}]},
+            config=config,
+        )
+
+        # Log tool calls
+        for msg in result["messages"]:
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    args = ", ".join(f"{k}={v!r}" for k, v in tc["args"].items())
+                    print(f"  Tool: {tc['name']}({args})")
+
+        print(f"\nAgent: {result['messages'][-1].content}")
+
+if __name__ == "__main__":
+    main()
+```
+
+Use `/add-interactive-chat` to generate a chat console tailored to your specific agent.
 
 ## Next Steps
 
@@ -211,11 +273,14 @@ After basic setup, explore:
 
 - **[Architecture](../architecture/SKILL.md)**: Design agent topologies and bounded contexts
 - **[Patterns](../patterns/SKILL.md)**: System prompts, tool design, anti-patterns
+- **[Tool Design](../tool-design/SKILL.md)**: Best practices for designing agent tools
 - **[Evals](../evals/SKILL.md)**: Testing, benchmarking, and debugging
 - **[Evolution](../evolution/SKILL.md)**: Maturity model and refactoring strategies
+- **[API Cheatsheet](../patterns/references/api-cheatsheet.md)**: Quick reference for `create_react_agent` parameters
 
 ### Commands
 
 - `/new-sdk-app` - Scaffold a new DeepAgents project with dependencies and examples
+- `/add-interactive-chat` - Generate an interactive chat console for your agent
 - `/design-topology` - Interactive guide to design optimal agent topology
 - `/validate-agent` - Check agent code for anti-patterns and security issues
