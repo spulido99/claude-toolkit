@@ -10,7 +10,33 @@ Best practices for defining tools in deep agents.
 4. **Default values**: Support optional parameters
 5. **Required fields**: Mark mandatory parameters
 
-## ⚠️ CRITICAL: Security with ToolRuntime
+## AI-Friendly Response Pattern
+
+Tools should return structured responses with navigation:
+
+```python
+@tool
+def get_account_balances(include_details: bool = False) -> dict:
+    """Consulta saldos de todas las cuentas.
+
+    Usar cuando el usuario pregunte:
+    - 'cuanto tengo?'
+    - 'mi saldo'
+
+    Args:
+        include_details: Incluir numero de cuenta y tipo
+    """
+    return {
+        "data": [...],
+        "formatted": "Tus cuentas:\n  - Cuenta PYG: Gs. 5.000.000",
+        "available_actions": ["get_transactions", "transfer_funds"],
+        "message_for_user": "Tus cuentas:\n  - Cuenta PYG: Gs. 5.000.000"
+    }
+```
+
+See [Tool Design Skill](../../tool-design/SKILL.md) for complete AI-friendly tool design principles.
+
+## ⚠️ CRITICAL: Security with InjectedState
 
 **Never expose user IDs, API keys, or credentials as tool parameters.** The LLM can pass ANY value to tool parameters—this is a security vulnerability.
 
@@ -30,12 +56,14 @@ def send_email(api_key: str, to: str, body: str) -> bool:
     return send_via_api(api_key, to, body)
 ```
 
-### ✅ SECURE: ToolRuntime Context Injection
+### ✅ SECURE: InjectedState Context Injection
 
 ```python
 import os
 from dataclasses import dataclass
-from langchain.tools import tool, ToolRuntime
+from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedState, InjectedStore, create_react_agent
+from typing import Annotated
 
 @dataclass
 class SecureContext:
@@ -44,26 +72,33 @@ class SecureContext:
     tenant_id: str    # Multi-tenant isolation
 
 @tool
-def get_user_data(runtime: ToolRuntime[SecureContext]) -> dict:
+def get_user_data(
+    state: Annotated[dict, InjectedState],  # Invisible to LLM
+) -> dict:
     """Get current user's profile data."""
-    # SAFE: user_id injected from runtime, not controllable by LLM
-    return fetch_from_db(runtime.context.user_id)
+    # SAFE: user_id injected from state, not controllable by LLM
+    user_id = state.get("user_id")  # From injected context
+    return fetch_from_db(user_id)
 
 @tool
-def send_email(to: str, body: str, runtime: ToolRuntime[SecureContext]) -> bool:
+def send_email(
+    to: str,
+    body: str,
+    state: Annotated[dict, InjectedState],  # Invisible to LLM
+) -> bool:
     """Send email to specified recipient."""
     # SAFE: API key from context, user_id for audit
     return send_via_api(
-        api_key=runtime.context.api_key,
-        from_user=runtime.context.user_id,
+        api_key=state.get("api_key"),
+        from_user=state.get("user_id"),
         to=to,
         body=body
     )
 
 # Create agent with context schema
-agent = create_deep_agent(
+agent = create_react_agent(
     tools=[get_user_data, send_email],
-    context_schema=SecureContext
+    context_schema=SecureContext,
 )
 
 # Invoke with secure context (invisible to LLM)
@@ -72,8 +107,8 @@ result = agent.invoke(
     context=SecureContext(
         user_id="user_123",
         api_key=os.environ["SERVICE_API_KEY"],
-        tenant_id="tenant_abc"
-    )
+        tenant_id="tenant_abc",
+    ),
 )
 ```
 
@@ -81,24 +116,22 @@ result = agent.invoke(
 
 - [ ] No user identifiers as tool parameters
 - [ ] No API keys/tokens as tool parameters
-- [ ] No credentials in any form as parameters
-- [ ] Use `ToolRuntime` for all sensitive context
-- [ ] Use `interrupt_on` for destructive operations
-- [ ] Audit logging includes runtime context
+- [ ] Use `context_schema` + `InjectedState` for sensitive context
+- [ ] Use `interrupt_before` for destructive operations
 
 ### Preventing Context Leakage
 
-Even with ToolRuntime, context can leak through error messages, logging, or return values:
+Even with InjectedState, context can leak through error messages, logging, or return values:
 
 ```python
 # ❌ BAD: Context leaks in error message
-raise ValueError(f"Failed for user {runtime.context.user_id}")
+raise ValueError(f"Failed for user {state.get('user_id')}")
 
 # ✅ GOOD: Generic error, context in audit logs only
 raise ValueError("Operation failed. Check audit logs for details.")
 
 # ❌ BAD: Echoing context back to LLM
-return {"user_id": runtime.context.user_id, "data": result}
+return {"user_id": state.get("user_id"), "data": result}
 
 # ✅ GOOD: Only return necessary data
 return {"data": result}
@@ -127,13 +160,18 @@ If shell access is required, implement strict allowlisting:
 ```python
 import shlex
 import subprocess
-from langchain.tools import tool, ToolRuntime
+from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedState
+from typing import Annotated
 
 ALLOWED_COMMANDS = ["ls", "cat", "grep", "wc", "head", "tail"]
 BLOCKED_ARGS = ["--", "-c", "|", ";", "&", ">", "<", "`", "$"]
 
 @tool
-def safe_execute(command: str, runtime: ToolRuntime) -> dict:
+def safe_execute(
+    command: str,
+    state: Annotated[dict, InjectedState],  # Invisible to LLM
+) -> dict:
     """Execute allowlisted commands only in sandboxed environment."""
     # Parse command safely
     try:
@@ -476,13 +514,9 @@ tools_write = [
     delete_record
 ]
 
-agent = create_deep_agent(
+agent = create_react_agent(
     tools=tools_readonly + tools_write,
-    interrupt_on={
-        "create_record": {"allowed_decisions": ["approve", "reject"]},
-        "update_record": {"allowed_decisions": ["approve", "edit", "reject"]},
-        "delete_record": {"allowed_decisions": ["approve", "reject"]}
-    }
+    interrupt_before=["create_record", "update_record", "delete_record"],
 )
 ```
 
