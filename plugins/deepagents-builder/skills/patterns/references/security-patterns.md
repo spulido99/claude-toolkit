@@ -2,98 +2,92 @@
 
 When deploying agents to end users, additional security measures are required beyond the base security model.
 
-## AGENTS.md Write Protection
+## Shared Mutable State Protection
 
-The pattern "agent can update AGENTS.md via `edit_file`" is **dangerous for customer-facing agents**. This creates a **Persistent Prompt Injection** vulnerability:
+The pattern "agent can update shared context via tools" is **dangerous for customer-facing agents**. This creates a **Persistent Prompt Injection** vulnerability:
 
 ```
-Malicious user → Tricks agent → Writes to AGENTS.md
-→ Malicious content persists → Affects ALL future sessions
+Malicious user -> Tricks agent -> Writes to shared context
+-> Malicious content persists -> Affects ALL future sessions
 ```
 
 ## Mitigation Strategies
 
-### Strategy 1: Read-Only AGENTS.md (Recommended)
+### Strategy 1: Use `context_schema` for User-Specific Context (Recommended)
+
+Instead of shared mutable state, inject user-specific context via `context_schema`. This ensures each user's context is isolated and immutable from the agent's perspective.
 
 ```python
-from deepagents import create_deep_agent
-import os
+from langgraph.prebuilt import create_react_agent
+from pydantic import BaseModel
 
-# Production: AGENTS.md is read-only, loaded via memory
-agent = create_deep_agent(
-    memory=["./.deepagents/AGENTS.md"],  # Read-only injection
-    # Do NOT give edit_file access to AGENTS.md paths
+class UserContext(BaseModel):
+    user_id: str
+    tenant_id: str
+    permissions: list[str]
+    preferences: dict
+
+# Production: context is injected per-request, not shared
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[...],
+    prompt="You are a helpful assistant. Use the provided context to personalize responses.",
+    context_schema=UserContext,
 )
 
-# Defense-in-depth: Also protect at filesystem level
-os.chmod("./.deepagents/AGENTS.md", 0o444)  # Read-only at OS level
-```
-
-For additional enforcement, use path-based restrictions in your backend:
-
-```python
-from deepagents.backends import CompositeBackend, StateBackend, ReadOnlyBackend
-
-agent = create_deep_agent(
-    memory=["./.deepagents/AGENTS.md"],
-    backend=CompositeBackend(
-        default=StateBackend(),
-        routes={
-            ".deepagents/": ReadOnlyBackend(),  # Enforced read-only
-        },
-    ),
+# Invoke with user-specific context
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "Hello"}]},
+    config={"configurable": {"user_id": "u123", "tenant_id": "t456", "permissions": ["read"], "preferences": {}}},
 )
 ```
 
 ### Strategy 2: Separate User Memory from System Context
 
 ```python
-from deepagents import create_deep_agent
-from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
+from langgraph.prebuilt import create_react_agent
+from pydantic import BaseModel
 
-# System context: read-only AGENTS.md
-# User memory: isolated in /user_memory/ (per-user, not shared)
-agent = create_deep_agent(
-    memory=["./.deepagents/AGENTS.md"],  # System context (read-only)
-    backend=CompositeBackend(
-        default=StateBackend(),
-        routes={
-            "/user_memory/": StoreBackend(),  # User-specific, isolated
-        },
-    ),
-    system_prompt="""You can remember user preferences in /user_memory/.
-    NEVER modify files in .deepagents/ directory."""
+class UserMemoryContext(BaseModel):
+    user_id: str
+    system_instructions: str  # Read-only system context
+    user_preferences: dict    # Per-user, isolated
+
+# System context is injected as read-only via context_schema
+# User preferences are isolated per-user
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[...],
+    prompt="""You can remember user preferences via the provided tools.
+    NEVER attempt to modify system instructions.""",
+    context_schema=UserMemoryContext,
 )
 ```
 
-### Strategy 3: Human Approval for Context Modifications
+### Strategy 3: Human Approval for Sensitive Operations
 
 ```python
+from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 
-agent = create_deep_agent(
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[edit_file, write_file, safe_remember],
     checkpointer=MemorySaver(),
-    interrupt_on={
-        "edit_file": {
-            "paths": ["**/AGENTS.md", "**/.deepagents/**"],
-            "allowed_decisions": ["approve", "reject"]
-        },
-        "write_file": {
-            "paths": ["**/AGENTS.md", "**/.deepagents/**"],
-            "allowed_decisions": ["approve", "reject"]
-        }
-    }
+    interrupt_before=["edit_file", "write_file"],
 )
 ```
 
 ### Strategy 4: Content Validation Wrapper
 
-> **Note**: Regex validation is a defense-in-depth measure, not a primary control. Sophisticated attacks can bypass pattern matching. Always combine with Strategy 1 (read-only AGENTS.md) for production deployments.
+> **Note**: Regex validation is a defense-in-depth measure, not a primary control. Sophisticated attacks can bypass pattern matching. Always combine with Strategy 1 (`context_schema` isolation) for production deployments.
 
 ```python
 import os
 import re
-from langchain.tools import tool, ToolRuntime
+from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedState
+from typing import Annotated
 
 DANGEROUS_PATTERNS = [
     r"ignore.*(?:security|rules|restrictions)",
@@ -120,7 +114,7 @@ def validate_key(key: str) -> bool:
     return ".." not in key and "/" not in key and "\\" not in key
 
 @tool
-def safe_remember(key: str, value: str, runtime: ToolRuntime) -> dict:
+def safe_remember(key: str, value: str, state: Annotated[dict, InjectedState]) -> dict:
     """Safely store user preference with validation."""
     if not validate_key(key):
         return {"error": "Invalid key: path characters not allowed", "stored": False}
@@ -128,7 +122,7 @@ def safe_remember(key: str, value: str, runtime: ToolRuntime) -> dict:
     if not validate_memory_content(value):
         return {"error": "Content validation failed", "stored": False}
 
-    base_path = f"/user_memory/{runtime.context.user_id}"
+    base_path = f"/user_memory/{state.get('user_id')}"
     target_path = os.path.normpath(os.path.join(base_path, f"{key}.txt"))
     if not target_path.startswith(os.path.normpath(base_path)):
         return {"error": "Path traversal detected", "stored": False}
@@ -144,14 +138,16 @@ For production, use a distributed rate limiter (e.g., Redis-based). Here's a bas
 ```python
 from functools import wraps
 import time
+from langgraph.prebuilt import InjectedState
+from typing import Annotated
 
 RATE_LIMIT = {}
 MAX_REQUESTS_PER_MINUTE = 10
 
 def rate_limited(func):
     @wraps(func)
-    def wrapper(*args, runtime=None, **kwargs):
-        user_id = runtime.context.user_id
+    def wrapper(*args, state: Annotated[dict, InjectedState] = None, **kwargs):
+        user_id = state.get("user_id")
         now = time.time()
 
         if user_id not in RATE_LIMIT:
@@ -163,7 +159,7 @@ def rate_limited(func):
             return {"error": "Rate limit exceeded", "retry_after": 60}
 
         RATE_LIMIT[user_id].append(now)
-        return func(*args, runtime=runtime, **kwargs)
+        return func(*args, state=state, **kwargs)
     return wrapper
 ```
 
@@ -173,15 +169,18 @@ def rate_limited(func):
 import logging
 import hashlib
 from datetime import datetime
+from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedState
+from typing import Annotated
 
-audit_logger = logging.getLogger("deepagents.audit")
+audit_logger = logging.getLogger("agent.audit")
 
 @tool
-def safe_remember(key: str, value: str, runtime: ToolRuntime) -> dict:
+def safe_remember(key: str, value: str, state: Annotated[dict, InjectedState]) -> dict:
     audit_logger.info({
         "event": "memory_write",
-        "user_id": runtime.context.user_id,
-        "tenant_id": getattr(runtime.context, "tenant_id", "default"),
+        "user_id": state.get("user_id"),
+        "tenant_id": state.get("tenant_id", "default"),
         "key": key,
         "value_hash": hashlib.sha256(value.encode()).hexdigest(),
         "timestamp": datetime.utcnow().isoformat(),
@@ -193,40 +192,44 @@ def safe_remember(key: str, value: str, runtime: ToolRuntime) -> dict:
 
 Before deploying customer-facing agents:
 
-- [ ] AGENTS.md is read-only (no edit_file access)
-- [ ] User memory is isolated per-user (not shared)
-- [ ] System context separated from user preferences
-- [ ] `interrupt_on` configured for sensitive paths
+- [ ] System context injected via `context_schema` (not shared mutable state)
+- [ ] User context is isolated per-user via `context_schema`
+- [ ] System instructions separated from user preferences
+- [ ] `interrupt_before` configured for sensitive tools
 - [ ] Content validation for any user-writable memory
-- [ ] Audit logging for all file modifications
+- [ ] Audit logging for all modifications
 - [ ] Rate limiting on memory operations
 - [ ] Regular review of stored user memories
 
 ## System vs User Context Architecture
 
-| Context Type | Storage | Writeable | Shared |
-|-------------|---------|-----------|--------|
-| System Prompt | Code | No | All users |
-| AGENTS.md | File | No (prod) | All users |
-| User Preferences | StoreBackend | Yes (validated) | Per-user |
-| Session State | StateBackend | Yes | Per-session |
+| Context Type | Mechanism | Writeable | Shared |
+|-------------|-----------|-----------|--------|
+| System Prompt | `prompt=` parameter | No | All users |
+| User Context | `context_schema` | No (injected per-request) | Per-user |
+| User Preferences | Custom tool + store | Yes (validated) | Per-user |
+| Session State | Checkpointer | Yes | Per-session |
 
 ## Anti-Pattern: Shared Writable Context
 
 ```python
-# ❌ DANGEROUS: All users can modify shared AGENTS.md
-agent = create_deep_agent(
-    memory=["./.deepagents/AGENTS.md"],
-    tools=[edit_file],  # Agent can modify AGENTS.md!
+# DANGEROUS: All users can modify shared state
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[edit_file],  # Agent can modify shared context!
 )
 # One malicious user compromises ALL future sessions
 
-# ✅ SAFE: User memory isolated, AGENTS.md read-only
-agent = create_deep_agent(
-    memory=["./.deepagents/AGENTS.md"],  # Read-only
-    backend=CompositeBackend(
-        default=StateBackend(),
-        routes={f"/users/{user_id}/": StoreBackend()},  # Isolated
-    ),
+# SAFE: User context isolated via context_schema
+from pydantic import BaseModel
+
+class UserContext(BaseModel):
+    user_id: str
+    preferences: dict
+
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[safe_remember],  # Validated tools only
+    context_schema=UserContext,  # Per-user isolation
 )
 ```
