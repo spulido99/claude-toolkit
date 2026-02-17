@@ -41,7 +41,7 @@ subagents = [
 **Example**:
 ```python
 # ❌ BAD: Cognitive overload
-main_agent = create_deep_agent(
+main_agent = create_react_agent(
     tools=[
         web_search, db_query, email, slack, jira, github,
         s3, lambda, ec2, rds, api_1, api_2, ... api_50
@@ -52,7 +52,7 @@ main_agent = create_deep_agent(
 **Fix**: Platform subagents
 ```python
 # ✅ GOOD: Grouped capabilities
-agent = create_deep_agent(
+agent = create_react_agent(
     subagents=[
         {"name": "search-platform", "tools": [web, db, docs]},
         {"name": "communication-platform", "tools": [email, slack]},
@@ -102,7 +102,7 @@ subagents = [
 **Example**:
 ```python
 # ❌ BAD: Over-engineered for MVP
-agent = create_deep_agent(
+agent = create_react_agent(
     subagents=[
         {"name": "planning-agent"},
         {"name": "execution-agent"},
@@ -116,7 +116,7 @@ agent = create_deep_agent(
 **Fix**: Start simple
 ```python
 # ✅ GOOD: Single agent sufficient
-agent = create_deep_agent(
+agent = create_react_agent(
     tools=[query_data, generate_report, send_email]
 )
 # Add subagents only when cognitive load becomes problem
@@ -217,7 +217,7 @@ calculator = {
 **Fix**: Direct tool use or library
 ```python
 # ✅ GOOD: Simple tool in main agent
-agent = create_deep_agent(
+agent = create_react_agent(
     tools=[calculate_tax]  # Simple function, no subagent needed
 )
 ```
@@ -255,7 +255,7 @@ data_cleaner = {
 **Example**:
 ```python
 # ❌ BAD: Hardcoded, inflexible
-agent = create_deep_agent(
+agent = create_react_agent(
     subagents=[agent1, agent2, agent3]  # Can't add more easily
 )
 ```
@@ -265,7 +265,7 @@ agent = create_deep_agent(
 # ✅ GOOD: Configurable, scalable
 config = load_agent_config("config.yaml")
 
-agent = create_deep_agent(
+agent = create_react_agent(
     subagents=[
         build_subagent(spec) for spec in config["subagents"]
     ]
@@ -402,7 +402,7 @@ tools = [
 **Example**:
 ```python
 # ❌ BAD: Agent doesn't know what's available
-agent = create_deep_agent(
+agent = create_react_agent(
     tools=[query_db, send_email, generate_report],
     system_prompt="You are a helpful assistant."
 )
@@ -413,7 +413,7 @@ agent = create_deep_agent(
 **Fix**: Provide resource inventory in AGENTS.md
 ```python
 # ✅ GOOD: Agent knows its resources via memory
-agent = create_deep_agent(
+agent = create_react_agent(
     memory=["./.deepagents/AGENTS.md"],
     tools=[query_db, send_email, generate_report],
     system_prompt="You are a helpful assistant."
@@ -445,14 +445,14 @@ DO NOT:
 # What counts as "sensitive"? "risky"? Agent becomes overly cautious.
 ```
 
-**Fix**: Use `interrupt_on` for specific controls
+**Fix**: Use `interrupt_before` for specific controls
 ```python
 # ✅ GOOD: Specific controls with human approval
 from langgraph.checkpoint.memory import MemorySaver
 
-agent = create_deep_agent(
+agent = create_react_agent(
     checkpointer=MemorySaver(),
-    interrupt_on={
+    interrupt_before={
         "process_refund": {"allowed_decisions": ["approve", "reject"]},
         "delete_account": {"allowed_decisions": ["approve", "reject"]},
         "change_subscription": {"allowed_decisions": ["approve", "edit", "reject"]},
@@ -462,6 +462,107 @@ agent = create_deep_agent(
 # Agent can do anything, but sensitive actions require human approval
 # No vague restrictions—clear, auditable controls
 ```
+
+---
+
+## Anti-Pattern 17: Deprecated API Usage
+
+**Symptom**: Using deprecated parameters that may break in future versions or cause unexpected behavior.
+
+**Example**:
+```python
+# ❌ BAD: Deprecated parameters
+from langgraph.prebuilt import create_react_agent
+
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    state_modifier="You are helpful.",     # DEPRECATED → use prompt=
+    config_schema=MyContext,               # DEPRECATED → use context_schema=
+    version="v1",                          # DEPRECATED → v2 is default
+)
+```
+
+**Fix**: Use current API parameters
+```python
+# ✅ GOOD: Current API
+from langgraph.prebuilt import create_react_agent
+
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    prompt="You are helpful.",             # Current parameter
+    context_schema=MyContext,              # Current parameter
+    # version="v2" is default, no need to specify
+)
+```
+
+**Reference**: See [API Cheatsheet](api-cheatsheet.md) for the current API.
+
+---
+
+## Anti-Pattern 18: Opaque Tool Responses
+
+**Symptom**: Tools return raw data without context, forcing the agent to guess what to do next.
+
+**Example**:
+```python
+# ❌ BAD: Raw data, no navigation, no formatted output
+@tool
+def get_balance(account_id: str) -> dict:
+    """Get account balance."""
+    return {"balance": 5000000, "currency": "PYG"}
+# Agent doesn't know: what to show user, what to do next, how to format
+```
+
+**Fix**: Rich responses with navigation
+```python
+# ✅ GOOD: Structured response with context and navigation
+@tool
+def get_account_balances(include_details: bool = False) -> dict:
+    """Consulta saldos de todas las cuentas.
+
+    Usar cuando el usuario pregunte:
+    - 'cuanto tengo?'
+    - 'mi saldo'
+    """
+    return {
+        "data": {"balance": 5000000, "currency": "PYG"},
+        "formatted": "Saldo disponible: Gs. 5.000.000",
+        "available_actions": ["get_transactions", "transfer_funds"],
+        "message_for_user": "Tu saldo es Gs. 5.000.000"
+    }
+```
+
+**Reference**: See [Tool Design](../../tool-design/SKILL.md) for the complete response pattern.
+
+---
+
+## Anti-Pattern 19: CRUD Tool Names
+
+**Symptom**: Tools named after HTTP methods or database operations instead of business domain operations.
+
+**Example**:
+```python
+# ❌ BAD: Generic CRUD naming — agent can't distinguish purpose
+tools = [
+    get_resource,       # Get what? From where?
+    create_resource,    # Create what kind?
+    update_resource,    # Update which aspect?
+    delete_resource,    # Delete what? Is it reversible?
+]
+```
+
+**Fix**: Domain-semantic naming
+```python
+# ✅ GOOD: Names describe business operations
+tools = [
+    get_account_balances,    # Clear: returns balances
+    create_investment,       # Clear: opens investment
+    update_account_alias,    # Clear: changes alias
+    cancel_transfer,         # Clear: cancels transfer (not "delete")
+]
+```
+
+**Key insight**: If you need to explain what the tool does beyond its name, the name needs improvement.
 
 ---
 
@@ -488,4 +589,7 @@ Run through this checklist to identify anti-patterns:
 - [ ] Is the agent taking meaningful actions or just routing?
 - [ ] Were tools designed for agents, or retrofitted after UI features?
 - [ ] Does the agent know its available resources? (Context Starvation)
-- [ ] Are restrictions specific and enforceable via `interrupt_on`? (Artificial Limits)
+- [ ] Are restrictions specific and enforceable via `interrupt_before`? (Artificial Limits)
+- [ ] Using current API parameters? (`prompt=`, `context_schema=`) (Deprecated API)
+- [ ] Tool responses include `formatted` + `available_actions`? (Opaque Responses)
+- [ ] Tool names are domain-semantic, not generic CRUD? (CRUD Names)
