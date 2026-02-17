@@ -1,9 +1,9 @@
 {
   "name": "deepagents-builder",
-  "version": "1.0.0",
-  "description": "Build production-ready AI agents with LangChain's DeepAgents framework. Provides skills for architecture design, implementation patterns, and evolution strategies.",
+  "version": "1.1.0",
+  "description": "Build production-ready AI agents with LangGraph. Provides skills for architecture design, AI-friendly tool design, implementation patterns, interactive testing, and evolution strategies.",
   "author": {
     "name": "spuli"
   },
-  "keywords": ["deepagents", "langchain", "ai-agents", "multi-agent", "architecture"]
+  "keywords": ["deepagents", "langchain", "langgraph", "ai-agents", "multi-agent", "architecture", "tool-design"]
 }
