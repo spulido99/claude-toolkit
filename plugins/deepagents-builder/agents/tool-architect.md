@@ -182,7 +182,7 @@ domains/
 Each tool follows the standard pattern:
 
 ```python
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 @tool
 def get_account_balances(account_id: str) -> dict:

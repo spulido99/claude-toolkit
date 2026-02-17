@@ -166,7 +166,7 @@ Generate appropriate tools based on agent type with:
 - `@tool` decorator
 - Clear docstrings
 - Proper type hints
-- ToolRuntime for sensitive operations
+- InjectedState for secure context injection
 
 #### src/{project_name}/prompts.py
 

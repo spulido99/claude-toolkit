@@ -418,7 +418,7 @@ Classify every tool by its **impact level** to determine confirmation requiremen
 ### Mapping to LangGraph interrupt_before
 
 ```python
-from deepagents import create_deep_agent
+from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 
 # Define tools by level
@@ -431,20 +431,13 @@ level_5_tools = [close_account, delete_all_data]
 all_tools = level_1_tools + level_2_tools + level_3_tools + level_4_tools + level_5_tools
 
 # Configure interrupt_before for level 3+ tools
-agent = create_deep_agent(
+sensitive_tools = [t.__name__ for t in level_3_tools + level_4_tools + level_5_tools]
+
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
     tools=all_tools,
     checkpointer=MemorySaver(),
-    interrupt_on={
-        # Level 3: Agent confirms with user
-        "change_shipping_address": {"allowed_decisions": ["approve", "edit", "reject"]},
-        "update_profile": {"allowed_decisions": ["approve", "edit", "reject"]},
-        # Level 4: User must explicitly confirm
-        "transfer_funds": {"allowed_decisions": ["approve", "reject"]},
-        "process_refund": {"allowed_decisions": ["approve", "reject"]},
-        # Level 5: User must explicitly approve with reason
-        "close_account": {"allowed_decisions": ["approve", "reject"]},
-        "delete_all_data": {"allowed_decisions": ["approve", "reject"]},
-    }
+    interrupt_before=sensitive_tools,  # Pauses before these tools for human approval
 )
 ```
 
@@ -636,7 +629,7 @@ domains/
 
 ```python
 # domains/banking/tools.py
-from langchain.tools import tool
+from langchain_core.tools import tool
 from .schemas import Money, Account
 from .formatters import format_balances, format_transfer
 
@@ -662,18 +655,36 @@ TOOLS = [get_account_balances, transfer_funds, search_transactions]
 ### Agent Registration
 
 ```python
+from langgraph.prebuilt import create_react_agent
 from domains.banking.tools import TOOLS as banking_tools
 from domains.support.tools import TOOLS as support_tools
 from domains.orders.tools import TOOLS as order_tools
 
-agent = create_deep_agent(
+# Option 1: Single agent with all tools (simple)
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
     tools=banking_tools + support_tools + order_tools,
-    # Or use subagents for domain isolation:
-    subagents=[
-        {"name": "banking", "tools": banking_tools},
-        {"name": "support", "tools": support_tools},
-        {"name": "orders", "tools": order_tools},
-    ]
+    prompt="You handle banking, support, and order operations.",
+)
+
+# Option 2: Agent-as-tool for domain isolation
+banking_agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=banking_tools,
+    prompt="You handle banking operations.",
+    name="banking",
+)
+support_agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=support_tools,
+    prompt="You handle support operations.",
+    name="support",
+)
+
+coordinator = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[banking_agent, support_agent],
+    prompt="Delegate to the right specialist.",
 )
 ```
 
@@ -682,7 +693,7 @@ agent = create_deep_agent(
 Full template for generating a Python tool with all 10 principles applied.
 
 ```python
-from langchain.tools import tool
+from langchain_core.tools import tool
 from typing import TypedDict, Literal
 
 

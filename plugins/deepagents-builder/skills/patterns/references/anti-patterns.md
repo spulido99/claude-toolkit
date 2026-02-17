@@ -403,28 +403,28 @@ tools = [
 ```python
 # ❌ BAD: Agent doesn't know what's available
 agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
     tools=[query_db, send_email, generate_report],
-    system_prompt="You are a helpful assistant."
+    prompt="You are a helpful assistant."
 )
 # Agent doesn't know: which DBs exist, email templates, report formats
 # Results in constant clarification questions or wrong assumptions
 ```
 
-**Fix**: Provide resource inventory in AGENTS.md
+**Fix**: Provide resource inventory in the system prompt
 ```python
-# ✅ GOOD: Agent knows its resources via memory
+# ✅ GOOD: Agent knows its resources via detailed prompt
 agent = create_react_agent(
-    memory=["./.deepagents/AGENTS.md"],
+    model="anthropic:claude-sonnet-4-20250514",
     tools=[query_db, send_email, generate_report],
-    system_prompt="You are a helpful assistant."
-)
+    prompt="""You are a helpful assistant.
 
-# .deepagents/AGENTS.md contains:
-# ## Available Resources
-# - Databases: users_db, orders_db, analytics_db
-# - Email templates: /templates/welcome.html, /templates/receipt.html
-# - Report formats: PDF (default), CSV, JSON
-# - API limits: 100 requests/minute
+## Available Resources
+- Databases: users_db, orders_db, analytics_db
+- Email templates: /templates/welcome.html, /templates/receipt.html
+- Report formats: PDF (default), CSV, JSON
+- API limits: 100 requests/minute"""
+)
 ```
 
 ---
@@ -448,18 +448,17 @@ DO NOT:
 **Fix**: Use `interrupt_before` for specific controls
 ```python
 # ✅ GOOD: Specific controls with human approval
+from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 
 agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[process_refund, delete_account, change_subscription, ...],
     checkpointer=MemorySaver(),
-    interrupt_before={
-        "process_refund": {"allowed_decisions": ["approve", "reject"]},
-        "delete_account": {"allowed_decisions": ["approve", "reject"]},
-        "change_subscription": {"allowed_decisions": ["approve", "edit", "reject"]},
-    },
-    system_prompt="You are a support agent with full capabilities."
+    interrupt_before=["process_refund", "delete_account", "change_subscription"],
+    prompt="You are a support agent with full capabilities."
 )
-# Agent can do anything, but sensitive actions require human approval
+# Agent can do anything, but sensitive actions pause for human approval
 # No vague restrictions—clear, auditable controls
 ```
 
