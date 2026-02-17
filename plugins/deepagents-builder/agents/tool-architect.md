@@ -179,10 +179,10 @@ domains/
     formatters.py
 ```
 
-Each tool follows the standard pattern:
+Each tool follows the standard pattern. For tools that need secure context injection, use `ToolRuntime` from `langchain.tools` (see [API Cheatsheet](../skills/patterns/references/api-cheatsheet.md) §3).
 
 ```python
-from langchain_core.tools import tool
+from langchain.tools import tool
 
 @tool
 def get_account_balances(account_id: str) -> dict:
@@ -289,7 +289,7 @@ These 10 principles from the tool-design skill guide every decision (see `skills
 5. **Consistent Terminology** -- One term per concept across the entire tool catalog
 6. **Rich Response Semantics** -- Standard envelope: data, formatted, available_actions, message_for_user
 7. **Available Actions (Tool Graph)** -- Every response includes logical next steps as available_actions
-8. **Operation Levels** -- Classify tools 1-5 by impact; map to interrupt_before for confirmation
+8. **Operation Levels** -- Classify tools 1-5 by impact; map to `interrupt_on` for confirmation
 9. **Delegated Confirmations** -- Level 3+ tools return pending_confirmation before executing
 10. **Idempotency Keys** -- Transactional tools accept idempotency_key to prevent duplicates
 

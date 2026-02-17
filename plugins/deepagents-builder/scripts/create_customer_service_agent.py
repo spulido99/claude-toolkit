@@ -6,7 +6,7 @@ Demonstrates all key patterns and best practices.
 import os
 from typing import Literal
 from deepagents import create_deep_agent
-from langchain_core.tools import tool
+from langchain.tools import tool
 
 # =============================================================================
 # TOOLS DEFINITION

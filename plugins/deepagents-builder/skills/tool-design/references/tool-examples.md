@@ -9,7 +9,7 @@ Real-world examples from a 32-tool banking/fintech catalog. Each example demonst
 **Level 1 (Read) | Domain: cuentas | No confirmation required**
 
 ```python
-from langchain_core.tools import tool
+from langchain.tools import tool
 from typing import Optional
 
 
@@ -121,7 +121,7 @@ def get_account_balances(include_details: bool = False) -> dict:
 **Level 4 (Financial) | Domain: transferencias | Requires user confirmation**
 
 ```python
-from langchain_core.tools import tool
+from langchain.tools import tool
 from typing import Optional
 import uuid
 
@@ -260,7 +260,7 @@ def transfer_funds(
 **Level 1 (Read) | Domain: inversiones | No confirmation required**
 
 ```python
-from langchain_core.tools import tool
+from langchain.tools import tool
 from typing import Optional
 
 
@@ -386,7 +386,7 @@ def get_investments(include_projections: bool = False) -> dict:
 **Level 4 (Financial) | Domain: inversiones | Requires user confirmation**
 
 ```python
-from langchain_core.tools import tool
+from langchain.tools import tool
 from typing import Optional, Literal
 import uuid
 

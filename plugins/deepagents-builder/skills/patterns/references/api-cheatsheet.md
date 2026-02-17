@@ -1,27 +1,43 @@
-# LangGraph/LangChain API Cheatsheet
+# DeepAgents API Cheatsheet
 
-Canonical API reference for LangGraph and LangChain. All skills and commands in this plugin MUST align to the patterns documented here. When in doubt, this file is the single source of truth.
+Canonical API reference for DeepAgents and the LangChain agent ecosystem. All skills and commands in this plugin MUST align to the patterns documented here. When in doubt, this file is the single source of truth.
+
+---
+
+## API Hierarchy
+
+| Level | Function | Package | Prompt Param | Use Case |
+|-------|----------|---------|--------------|----------|
+| **High** | `create_deep_agent` | `deepagents` | `system_prompt=` | Planning, filesystem, subagents, auto-summarization built-in |
+| **Mid** | `create_agent` | `langchain.agents` | `system_prompt=` | Custom middleware, custom state |
+| **Low** | `create_react_agent` | `langgraph.prebuilt` | `prompt=` | Basic ReAct loop (legacy, being deprecated) |
 
 ---
 
 ## 1. Agent Creation
 
-### `create_react_agent` (Primary)
+### `create_deep_agent` (Primary — Recommended)
 
-The default and recommended way to create agents. v2 is the default since late 2025.
+The high-level API with planning, filesystem backends, subagent orchestration, and auto-summarization built in.
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from deepagents import create_deep_agent
 
-agent = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
+    system_prompt="You are a helpful research assistant.",
     tools=[search, calculate],
-    prompt="You are a helpful research assistant.",
-    checkpointer=checkpointer,           # Persistence backend
-    context_schema=UserContext,           # Runtime context type (dataclass)
-    pre_model_hook=my_pre_hook,           # Runs before each LLM call
-    post_model_hook=my_post_hook,         # Runs after each LLM call
-    interrupt_before=["sensitive_tool"],  # Pause for human approval
+    subagents=[
+        {"name": "researcher", "tools": [web_search], "system_prompt": "You research topics."},
+        {"name": "writer", "tools": [write_doc], "system_prompt": "You write documents."},
+    ],
+    backend=FilesystemBackend("./workspace"),
+    memory="AGENTS.md",
+    skills=["planning", "summarization"],
+    middleware=[logging_middleware],
+    interrupt_on={"tool": {"allowed_decisions": ["approve", "reject", "modify"]}},
+    checkpointer=checkpointer,
+    store=store,
 )
 ```
 
@@ -30,17 +46,20 @@ agent = create_react_agent(
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `model` | `str` | Model identifier in `"provider:model"` format |
-| `tools` | `list` | List of tools (functions, agents-as-tools) |
-| `prompt` | `str` | System prompt for the agent |
+| `system_prompt` | `str` | System prompt for the agent |
+| `tools` | `list` | List of tools (functions decorated with `@tool`) |
+| `subagents` | `list[dict]` | Subagent definitions as dicts (see §5) |
+| `backend` | `Backend` | Persistence backend (`FilesystemBackend`, `StateBackend`, `StoreBackend`, `CompositeBackend`) |
+| `memory` | `str` | Path to AGENTS.md memory file (see §8) |
+| `skills` | `list[str]` | Built-in skills to enable (`"planning"`, `"summarization"`) |
+| `middleware` | `list[Callable]` | Middleware functions that run on each step |
+| `interrupt_on` | `dict` | HITL configuration for tool approval (see §7) |
 | `checkpointer` | `Checkpointer` | Persistence backend for conversation state |
-| `context_schema` | `type` | Dataclass defining runtime context shape |
-| `pre_model_hook` | `Callable` | Hook that runs before each model invocation |
-| `post_model_hook` | `Callable` | Hook that runs after each model invocation |
-| `interrupt_before` | `list[str]` | Tool names that require human approval before execution |
+| `store` | `BaseStore` | Key-value store for persistent memory |
 
-### `create_agent` (Alternative)
+### `create_agent` (Mid-Level Alternative)
 
-Newer alternative from `langchain.agents` with middleware support.
+From `langchain.agents`, provides custom middleware and state management without the high-level features.
 
 ```python
 from langchain.agents import create_agent
@@ -48,8 +67,23 @@ from langchain.agents import create_agent
 agent = create_agent(
     model="anthropic:claude-sonnet-4-20250514",
     tools=[search, calculate],
-    prompt="You are a helpful assistant.",
+    system_prompt="You are a helpful assistant.",
     middleware=[logging_middleware, auth_middleware],
+)
+```
+
+### `create_react_agent` (Legacy / Low-Level)
+
+> **Deprecation Notice**: `create_react_agent` from `langgraph.prebuilt` is a low-level API being deprecated in favor of `create_deep_agent`. Use only when you need direct control over the ReAct loop and cannot use higher-level APIs.
+
+```python
+from langgraph.prebuilt import create_react_agent
+
+agent = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[search, calculate],
+    prompt="You are a helpful assistant.",  # Note: prompt=, not system_prompt=
+    checkpointer=checkpointer,
 )
 ```
 
@@ -85,13 +119,68 @@ model = init_chat_model(
 
 ---
 
-## 3. Context Schema (Runtime Context)
+## 3. Tool Definition
 
-Use `context_schema=` to inject runtime context that is invisible to the LLM but accessible to tools and hooks. This replaces the deprecated `config_schema=`.
+### Basic Tool
+
+```python
+from langchain.tools import tool
+
+@tool
+def search_products(query: str, max_results: int = 10) -> list[dict]:
+    """Search product catalog by name or category.
+
+    Args:
+        query: Search terms
+        max_results: Maximum results to return
+    """
+    return db.search(query, limit=max_results)
+```
+
+### ToolRuntime: Secure Context Injection
+
+Use `ToolRuntime` to inject runtime context (user identity, credentials, tenant info) into tools without exposing it as LLM-visible parameters. This replaces the deprecated `InjectedState` and `InjectedStore`.
+
+```python
+from typing import Annotated
+from langchain.tools import tool, ToolRuntime
+
+@tool
+def get_user_data(
+    runtime: ToolRuntime[SecureContext],  # Invisible to LLM
+) -> dict:
+    """Get current user's profile data."""
+    user_id = runtime.context.user_id
+    return fetch_from_db(user_id)
+
+@tool
+def save_preference(
+    key: str,
+    value: str,
+    runtime: ToolRuntime[SecureContext],  # Invisible to LLM
+) -> str:
+    """Save a user preference."""
+    runtime.store.put(("preferences", runtime.context.user_id), key, {"value": value})
+    return f"Saved preference: {key}"
+```
+
+**`ToolRuntime` provides:**
+
+| Attribute | Description |
+|-----------|-------------|
+| `runtime.context` | The typed context object (from `context_schema` or backend) |
+| `runtime.store` | Access to the persistent key-value store |
+| `runtime.state` | Access to the current agent state (messages, etc.) |
+
+---
+
+## 4. Context Schema
+
+Use a dataclass or Pydantic model to define runtime context that is invisible to the LLM but accessible via `ToolRuntime` in tools.
 
 ```python
 from dataclasses import dataclass
-from langgraph.prebuilt import create_react_agent
+from deepagents import create_deep_agent
 
 @dataclass
 class UserContext:
@@ -99,10 +188,10 @@ class UserContext:
     tenant_id: str
     permissions: list[str]
 
-agent = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
     tools=[get_user_data, update_profile],
-    prompt="You are a user account assistant.",
+    system_prompt="You are a user account assistant.",
     context_schema=UserContext,
 )
 
@@ -117,166 +206,218 @@ result = agent.invoke(
 )
 ```
 
-**Important:** Use `context_schema=`, NOT `config_schema=` (deprecated).
-
----
-
-## 4. Tool Definition
-
-### Basic Tool
-
-```python
-from langchain_core.tools import tool
-
-@tool
-def search_products(query: str, max_results: int = 10) -> list[dict]:
-    """Search product catalog by name or category.
-
-    Args:
-        query: Search terms
-        max_results: Maximum results to return
-    """
-    return db.search(query, limit=max_results)
-```
-
-### InjectedState: Access Agent State
-
-Use `InjectedState` to let a tool read the agent's current state (message history, etc.) without exposing it as a parameter to the LLM.
-
-```python
-from typing import Annotated
-from langchain_core.tools import tool
-from langgraph.prebuilt import InjectedState
-
-@tool
-def summarize_conversation(
-    state: Annotated[dict, InjectedState],  # Invisible to LLM
-) -> str:
-    """Summarize the current conversation."""
-    messages = state["messages"]
-    return create_summary(messages)
-```
-
-### InjectedStore: Persistent Memory
-
-Use `InjectedStore` to give tools access to a persistent key-value store, invisible to the LLM.
-
-```python
-from typing import Annotated
-from langchain_core.tools import tool
-from langgraph.prebuilt import InjectedStore
-from langgraph.store.base import BaseStore
-
-@tool
-def save_user_preference(
-    key: str,
-    value: str,
-    store: Annotated[BaseStore, InjectedStore],  # Invisible to LLM
-) -> str:
-    """Save a user preference for future sessions."""
-    store.put(("preferences",), key, {"value": value})
-    return f"Saved preference: {key}"
-
-@tool
-def get_user_preferences(
-    store: Annotated[BaseStore, InjectedStore],  # Invisible to LLM
-) -> dict:
-    """Retrieve all saved user preferences."""
-    items = store.search(("preferences",))
-    return {item.key: item.value for item in items}
-```
-
 ---
 
 ## 5. Subagent Patterns
 
-### Agent as Tool (Recommended)
+### Subagent Dicts (Recommended)
 
-Create a specialist agent and pass it as a tool to the parent agent. This is the simplest and most composable pattern.
+The native pattern for `create_deep_agent`. Define subagents as dicts — the framework compiles them into `CompiledSubAgent` instances with proper lifecycle management.
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from deepagents import create_deep_agent
 
-# Create specialist agent
-research_agent = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
-    tools=[web_search, arxiv_search],
-    prompt="You are a research specialist. Search thoroughly and return findings.",
+    system_prompt="You coordinate research and writing tasks.",
+    tools=[],
+    subagents=[
+        {
+            "name": "researcher",
+            "model": "openai:gpt-4o",
+            "tools": [web_search, arxiv_search],
+            "system_prompt": "You are an expert researcher. Search thoroughly and return findings.",
+        },
+        {
+            "name": "writer",
+            "tools": [write_document],
+            "system_prompt": "You write clear, structured documents.",
+        },
+    ],
+)
+```
+
+**Subagent dict fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | `str` | Yes | Unique identifier for the subagent |
+| `system_prompt` | `str` | Yes | System prompt defining role and behavior |
+| `tools` | `list` | No | Tools available to the subagent |
+| `model` | `str` | No | Model override (inherits parent if omitted) |
+| `description` | `str` | No | Description for parent's routing decisions |
+| `backend` | `Backend` | No | Subagent-specific backend |
+
+### CompiledSubAgent
+
+When you need programmatic access to compiled subagents:
+
+```python
+from deepagents import create_deep_agent, CompiledSubAgent
+
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    system_prompt="Coordinator.",
+    subagents=[...],
 )
 
-# Use it as a tool in a parent agent
-parent_agent = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
-    tools=[research_agent, calculator, write_report],
-    prompt="You coordinate research tasks. Delegate research to the research tool.",
-)
+# Access compiled subagents
+for subagent in agent.subagents:
+    print(f"{subagent.name}: {type(subagent)}")  # CompiledSubAgent
 ```
 
 ### Supervisor Pattern
 
-Use `create_supervisor` for explicit orchestration with routing control.
+Use `create_supervisor` for explicit orchestration with routing control (mid-level alternative).
 
 ```python
 from langgraph_supervisor import create_supervisor
 
-# Define specialist agents
-researcher = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
-    tools=[web_search],
-    prompt="You research topics thoroughly.",
-)
-
-writer = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
-    tools=[write_document],
-    prompt="You write clear, structured documents.",
-)
-
-# Create supervisor that routes between them
 supervisor = create_supervisor(
     model="anthropic:claude-sonnet-4-20250514",
     agents=[researcher, writer],
     prompt="Route research tasks to researcher, writing tasks to writer.",
 )
+```
 
-result = supervisor.invoke(
-    {"messages": [{"role": "user", "content": "Research AI trends and write a report"}]},
+---
+
+## 6. Backends
+
+Backends manage persistent state (files, data, context) for agents.
+
+| Backend | Use Case | Description |
+|---------|----------|-------------|
+| `FilesystemBackend` | File-first agents | Read/write files in a workspace directory |
+| `StateBackend` | In-memory state | Volatile state within a session |
+| `StoreBackend` | Key-value persistence | Persistent key-value store |
+| `CompositeBackend` | Production | Combines multiple backends |
+
+```python
+from deepagents.backends import FilesystemBackend, CompositeBackend, StoreBackend
+
+# File-first agent with workspace
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    system_prompt="You manage project files.",
+    tools=[],
+    backend=FilesystemBackend("./workspace"),
+)
+
+# Production: composite backend
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    system_prompt="Production agent.",
+    tools=[],
+    backend=CompositeBackend([
+        FilesystemBackend("./workspace", read_only=True),
+        StoreBackend(store),
+    ]),
 )
 ```
 
 ---
 
-## 6. Checkpointers
+## 7. Human-in-the-Loop
+
+### `interrupt_on` (DeepAgents)
+
+```python
+from deepagents import create_deep_agent
+from langgraph.checkpoint.memory import MemorySaver
+
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    system_prompt="You are a support agent with full capabilities.",
+    tools=[process_refund, delete_account, read_data],
+    checkpointer=MemorySaver(),
+    interrupt_on={
+        "tool": {
+            "allowed_decisions": ["approve", "reject", "modify"],
+        }
+    },
+)
+
+# Agent pauses before sensitive tools, awaits human decision
+config = {"configurable": {"thread_id": "session-1"}}
+for event in agent.stream({"messages": [...]}, config, stream_mode="values"):
+    if "__interrupt__" in event:
+        decision = input("Approve? (approve/reject/modify): ")
+        agent.invoke(None, config)  # Resume execution
+```
+
+### Checkpointers
 
 | Checkpointer | Use Case | Import |
 |--------------|----------|--------|
 | `MemorySaver` | Development / testing | `from langgraph.checkpoint.memory import MemorySaver` |
 | `PostgresSaver` | Production | `from langgraph.checkpoint.postgres import PostgresSaver` |
-| `SqliteSaver` | Local production / single-node | `from langgraph.checkpoint.sqlite import SqliteSaver` |
+| `SqliteSaver` | Local production | `from langgraph.checkpoint.sqlite import SqliteSaver` |
+
+---
+
+## 8. AGENTS.md Memory Pattern
+
+`create_deep_agent` supports an `AGENTS.md` file for declarative memory — agent capabilities, context, and history described in markdown.
+
+```markdown
+# AGENTS.md
+
+## researcher
+- Role: Research specialist
+- Tools: web_search, arxiv_search
+- Strengths: Deep technical research, citation tracking
+- Limitations: Cannot write final reports
+
+## writer
+- Role: Document specialist
+- Tools: write_document, format_markdown
+- Strengths: Clear, structured writing
+- Limitations: Cannot search the web
+```
 
 ```python
-# Development
-from langgraph.checkpoint.memory import MemorySaver
-checkpointer = MemorySaver()
-
-# Production
-from langgraph.checkpoint.postgres import PostgresSaver
-checkpointer = PostgresSaver(conn_string="postgresql://user:pass@host/db")
-
-# Local production
-from langgraph.checkpoint.sqlite import SqliteSaver
-checkpointer = SqliteSaver(db_path="./agent_state.db")
-
-agent = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
-    tools=[...],
-    checkpointer=checkpointer,
+    system_prompt="You coordinate research projects.",
+    subagents=[...],
+    memory="AGENTS.md",  # Agent reads/updates this file
+)
+```
+
+The agent uses AGENTS.md for:
+- **Auto-summarization**: Summarizes completed work into memory
+- **Capability awareness**: Knows what each subagent can do
+- **Context persistence**: Maintains knowledge across sessions
+
+---
+
+## 9. Built-in Tools
+
+`create_deep_agent` provides these built-in tools (opt-in via `skills=`):
+
+| Tool | Description | Skill |
+|------|-------------|-------|
+| `shell` | Execute shell commands | `"shell"` |
+| `edit_file` | Edit files with diffs | `"filesystem"` |
+| `read_file` | Read file contents | `"filesystem"` |
+| `write_file` | Write files | `"filesystem"` |
+| `think` | Structured reasoning step | `"planning"` |
+| `plan` | Create execution plan | `"planning"` |
+| `summarize` | Summarize context | `"summarization"` |
+
+```python
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    system_prompt="You are a coding assistant.",
+    tools=[custom_tool],
+    skills=["filesystem", "planning"],  # Enables read_file, write_file, edit_file, think, plan
 )
 ```
 
 ---
 
-## 7. Invocation
+## 10. Invocation
 
 ### Basic Invoke
 
@@ -311,38 +452,46 @@ for event in agent.stream(
 
 ---
 
-## 8. Deprecated to Current Migration
+## 11. Deprecated to Current Migration
 
 | Deprecated | Current | Notes |
 |------------|---------|-------|
-| `state_modifier=` | `prompt=` | System prompt parameter renamed |
-| `message_modifier=` | `prompt=` | Also maps to `prompt=` |
+| `from langgraph.prebuilt import create_react_agent` | `from deepagents import create_deep_agent` | High-level API is now primary |
+| `prompt=` | `system_prompt=` | Parameter renamed in `create_deep_agent` and `create_agent` |
+| `state_modifier=` / `message_modifier=` | `system_prompt=` | Legacy prompt parameters |
 | `config_schema=` | `context_schema=` | Runtime context injection |
-| Model as object only | `"provider:model"` string | String format is now standard |
-| `SubAgentMiddleware` | Agent as tool or `langgraph-supervisor` | Use composable patterns |
+| `InjectedState` / `InjectedStore` | `ToolRuntime` | Secure context injection in tools |
+| `from langchain_core.tools import tool` | `from langchain.tools import tool` | Consolidated import path |
+| `interrupt_before=["tool_name"]` | `interrupt_on={"tool": {"allowed_decisions": [...]}}` | Richer HITL control |
+| Agent-as-tool (only pattern) | `subagents=` dicts + `CompiledSubAgent` | Native subagent support |
+| `pip install langgraph langchain-core langchain-anthropic` | `pip install deepagents` | Single package |
+| Model as object only | `"provider:model"` string | String format is standard |
 | `version="v1"` | `version="v2"` (now default) | v2 is default, no need to specify |
 
 ### Migration Example
 
 ```python
 # DEPRECATED (do not use)
-from langchain_anthropic import ChatAnthropic
-model = ChatAnthropic(model="claude-sonnet-4-20250514")
-agent = create_react_agent(
-    model=model,
-    tools=[...],
-    state_modifier="You are a helpful assistant.",
-    config_schema=MyConfig,
-    version="v1",
-)
+from langgraph.prebuilt import create_react_agent
+from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedState
 
-# CURRENT (use this)
 agent = create_react_agent(
     model="anthropic:claude-sonnet-4-20250514",
     tools=[...],
     prompt="You are a helpful assistant.",
-    context_schema=MyContext,
-    # version="v2" is now the default, no need to specify
+    interrupt_before=["dangerous_tool"],
+)
+
+# CURRENT (use this)
+from deepagents import create_deep_agent
+from langchain.tools import tool, ToolRuntime
+
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[...],
+    system_prompt="You are a helpful assistant.",
+    interrupt_on={"tool": {"allowed_decisions": ["approve", "reject"]}},
 )
 ```
 
@@ -350,7 +499,7 @@ agent = create_react_agent(
 
 ## Related Resources
 
-- **`tool-patterns.md`** - Tool definition patterns and security
-- **`security-patterns.md`** - Security patterns for agents
-- **`anti-patterns.md`** - Common mistakes to avoid
-- **`prompt-patterns.md`** - System prompt patterns for subagents
+- **`tool-patterns.md`** — Tool definition patterns and security with ToolRuntime
+- **`security-patterns.md`** — Security patterns with backends and AGENTS.md protection
+- **`anti-patterns.md`** — 19 common mistakes to avoid
+- **`prompt-patterns.md`** — System prompt patterns for subagents

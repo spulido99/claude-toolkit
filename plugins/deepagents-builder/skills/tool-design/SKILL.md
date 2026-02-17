@@ -403,7 +403,7 @@ if not has_balance_alert:
 
 ## Principle 8: Operation Levels
 
-Classify every tool by its **impact level** to determine confirmation requirements. Map these levels to LangGraph's `interrupt_before` for human-in-the-loop control.
+Classify every tool by its **impact level** to determine confirmation requirements. Map these levels to DeepAgents' `interrupt_on` for human-in-the-loop control.
 
 ### Level Definitions
 
@@ -415,10 +415,10 @@ Classify every tool by its **impact level** to determine confirmation requiremen
 | 4 | Financial | Money movement, charges | User confirms | `transfer_funds`, `process_refund` |
 | 5 | Irreversible | Cannot be undone | Explicit user approval | `close_account`, `delete_all_data` |
 
-### Mapping to LangGraph interrupt_before
+### Mapping to DeepAgents `interrupt_on`
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from deepagents import create_deep_agent
 from langgraph.checkpoint.memory import MemorySaver
 
 # Define tools by level
@@ -430,14 +430,16 @@ level_5_tools = [close_account, delete_all_data]
 
 all_tools = level_1_tools + level_2_tools + level_3_tools + level_4_tools + level_5_tools
 
-# Configure interrupt_before for level 3+ tools
-sensitive_tools = [t.__name__ for t in level_3_tools + level_4_tools + level_5_tools]
-
-agent = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
+    system_prompt="You handle all account operations.",
     tools=all_tools,
     checkpointer=MemorySaver(),
-    interrupt_before=sensitive_tools,  # Pauses before these tools for human approval
+    interrupt_on={
+        "tool": {
+            "allowed_decisions": ["approve", "reject", "modify"],
+        }
+    },  # Pauses before sensitive tools for human approval
 )
 ```
 
@@ -629,7 +631,7 @@ domains/
 
 ```python
 # domains/banking/tools.py
-from langchain_core.tools import tool
+from langchain.tools import tool
 from .schemas import Money, Account
 from .formatters import format_balances, format_transfer
 
@@ -655,36 +657,40 @@ TOOLS = [get_account_balances, transfer_funds, search_transactions]
 ### Agent Registration
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from deepagents import create_deep_agent
 from domains.banking.tools import TOOLS as banking_tools
 from domains.support.tools import TOOLS as support_tools
 from domains.orders.tools import TOOLS as order_tools
 
 # Option 1: Single agent with all tools (simple)
-agent = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
     tools=banking_tools + support_tools + order_tools,
-    prompt="You handle banking, support, and order operations.",
+    system_prompt="You handle banking, support, and order operations.",
 )
 
-# Option 2: Agent-as-tool for domain isolation
-banking_agent = create_react_agent(
+# Option 2: Subagents by domain (recommended for 15+ tools)
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
-    tools=banking_tools,
-    prompt="You handle banking operations.",
-    name="banking",
-)
-support_agent = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
-    tools=support_tools,
-    prompt="You handle support operations.",
-    name="support",
-)
-
-coordinator = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
-    tools=[banking_agent, support_agent],
-    prompt="Delegate to the right specialist.",
+    system_prompt="Delegate to the right specialist.",
+    tools=[],
+    subagents=[
+        {
+            "name": "banking",
+            "tools": banking_tools,
+            "system_prompt": "You handle banking operations.",
+        },
+        {
+            "name": "support",
+            "tools": support_tools,
+            "system_prompt": "You handle support operations.",
+        },
+        {
+            "name": "orders",
+            "tools": order_tools,
+            "system_prompt": "You handle order operations.",
+        },
+    ],
 )
 ```
 
@@ -693,7 +699,7 @@ coordinator = create_react_agent(
 Full template for generating a Python tool with all 10 principles applied.
 
 ```python
-from langchain_core.tools import tool
+from langchain.tools import tool
 from typing import TypedDict, Literal
 
 
@@ -833,7 +839,7 @@ Quick self-check:
 - [ ] Terminology matches project-wide glossary (Principle 5)
 - [ ] Response includes data, formatted, available_actions, message_for_user (Principle 6)
 - [ ] available_actions lists logical next steps (Principle 7)
-- [ ] Operation level is declared and mapped to interrupt_before (Principle 8)
+- [ ] Operation level is declared and mapped to `interrupt_on` (Principle 8)
 - [ ] Level 3+ tools return pending_confirmation first (Principle 9)
 - [ ] Transactional tools accept idempotency_key (Principle 10)
 

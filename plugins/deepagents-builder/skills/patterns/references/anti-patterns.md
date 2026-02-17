@@ -445,18 +445,20 @@ DO NOT:
 # What counts as "sensitive"? "risky"? Agent becomes overly cautious.
 ```
 
-**Fix**: Use `interrupt_before` for specific controls
+**Fix**: Use `interrupt_on` for specific controls
 ```python
 # ✅ GOOD: Specific controls with human approval
-from langgraph.prebuilt import create_react_agent
+from deepagents import create_deep_agent
 from langgraph.checkpoint.memory import MemorySaver
 
-agent = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
+    system_prompt="You are a support agent with full capabilities.",
     tools=[process_refund, delete_account, change_subscription, ...],
     checkpointer=MemorySaver(),
-    interrupt_before=["process_refund", "delete_account", "change_subscription"],
-    prompt="You are a support agent with full capabilities."
+    interrupt_on={
+        "tool": {"allowed_decisions": ["approve", "reject", "modify"]},
+    },
 )
 # Agent can do anything, but sensitive actions pause for human approval
 # No vague restrictions—clear, auditable controls
@@ -464,37 +466,58 @@ agent = create_react_agent(
 
 ---
 
-## Anti-Pattern 17: Deprecated API Usage
+## Anti-Pattern 17: Using Low-Level API When High-Level is Appropriate
 
-**Symptom**: Using deprecated parameters that may break in future versions or cause unexpected behavior.
+**Symptom**: Using `create_react_agent` (low-level, being deprecated) when `create_deep_agent` provides the needed functionality with less boilerplate.
 
 **Example**:
 ```python
-# ❌ BAD: Deprecated parameters
+# ❌ BAD: Low-level API for a task that needs planning, subagents, and backends
 from langgraph.prebuilt import create_react_agent
 
-agent = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
-    state_modifier="You are helpful.",     # DEPRECATED → use prompt=
-    config_schema=MyContext,               # DEPRECATED → use context_schema=
-    version="v1",                          # DEPRECATED → v2 is default
+researcher = create_react_agent(
+    model="openai:gpt-4o",
+    tools=[web_search],
+    prompt="You research topics.",
 )
+
+writer = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[write_doc],
+    prompt="You write documents.",
+)
+
+# Manual agent-as-tool composition
+coordinator = create_react_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[researcher, writer],
+    prompt="Coordinate research and writing.",
+    interrupt_before=["write_doc"],
+)
+# Missing: planning, filesystem backend, auto-summarization, AGENTS.md
 ```
 
-**Fix**: Use current API parameters
+**Fix**: Use `create_deep_agent` with native subagent dicts
 ```python
-# ✅ GOOD: Current API
-from langgraph.prebuilt import create_react_agent
+# ✅ GOOD: High-level API with built-in planning, backends, and subagents
+from deepagents import create_deep_agent
+from deepagents.backends import FilesystemBackend
 
-agent = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
-    prompt="You are helpful.",             # Current parameter
-    context_schema=MyContext,              # Current parameter
-    # version="v2" is default, no need to specify
+    system_prompt="Coordinate research and writing.",
+    tools=[],
+    subagents=[
+        {"name": "researcher", "model": "openai:gpt-4o", "tools": [web_search], "system_prompt": "You research topics."},
+        {"name": "writer", "tools": [write_doc], "system_prompt": "You write documents."},
+    ],
+    backend=FilesystemBackend("./workspace"),
+    skills=["planning", "summarization"],
+    interrupt_on={"tool": {"allowed_decisions": ["approve", "reject"]}},
 )
 ```
 
-**Reference**: See [API Cheatsheet](api-cheatsheet.md) for the current API.
+**Reference**: See [API Cheatsheet](api-cheatsheet.md) for the complete API hierarchy.
 
 ---
 
@@ -567,28 +590,27 @@ tools = [
 
 ## Detection Checklist
 
-Run through this checklist to identify anti-patterns:
+Run through this checklist to identify anti-patterns (19 total):
 
-**Classic Anti-Patterns:**
-- [ ] Can subagents make conflicting decisions?
-- [ ] Does main agent have > 30 tools?
-- [ ] Is it unclear when to use each subagent?
-- [ ] Are there subagents used only once?
-- [ ] Do subagents share tool assignments?
-- [ ] Does vocabulary conflict across contexts?
-- [ ] Is context still overflowing despite subagents?
-- [ ] Are there implicit dependencies?
-- [ ] Is the architecture inflexible?
-- [ ] Would a simple script work better?
+**Classic Anti-Patterns (1-10):**
+- [ ] Can subagents make conflicting decisions? (#1 Parallel Decision-Making)
+- [ ] Does main agent have > 30 tools? (#2 God Agent)
+- [ ] Is it unclear when to use each subagent? (#3 Unclear Boundaries)
+- [ ] Are there subagents used only once? (#8 One-Time Subagent)
+- [ ] Do subagents share tool assignments? (#5 Leaky Abstractions)
+- [ ] Does vocabulary conflict across contexts? (#7 Vocabulary Collision)
+- [ ] Is context still overflowing despite subagents? (#6 Context Pollution)
+- [ ] Are there implicit dependencies? (#9 Implicit Dependencies)
+- [ ] Is the architecture inflexible? (#10 No Evolution Path)
+- [ ] Would a simple script work better? (#4 Premature Decomposition)
 
-**Agent-Native Anti-Patterns:**
-- [ ] Can agents do everything users can via UI? (Parity)
-- [ ] Are custom tools atomic, or do they bundle workflows?
-- [ ] Could a new feature be added via prompt alone? (Composability)
-- [ ] Is the agent taking meaningful actions or just routing?
-- [ ] Were tools designed for agents, or retrofitted after UI features?
-- [ ] Does the agent know its available resources? (Context Starvation)
-- [ ] Are restrictions specific and enforceable via `interrupt_before`? (Artificial Limits)
-- [ ] Using current API parameters? (`prompt=`, `context_schema=`) (Deprecated API)
-- [ ] Tool responses include `formatted` + `available_actions`? (Opaque Responses)
-- [ ] Tool names are domain-semantic, not generic CRUD? (CRUD Names)
+**Agent-Native Anti-Patterns (11-19):**
+- [ ] Can agents do everything users can via UI? (#14 Orphan UI Actions)
+- [ ] Are custom tools atomic, or do they bundle workflows? (#13 Workflow-Shaped Tools)
+- [ ] Could a new feature be added via prompt alone? (#12 Build-Then-Add-Agent)
+- [ ] Is the agent taking meaningful actions or just routing? (#11 Agent-as-Router)
+- [ ] Does the agent know its available resources? (#15 Context Starvation)
+- [ ] Are restrictions specific and enforceable via `interrupt_on`? (#16 Artificial Limits)
+- [ ] Using `create_deep_agent` when planning/subagents/backends are needed? (#17 Low-Level API)
+- [ ] Tool responses include `formatted` + `available_actions`? (#18 Opaque Responses)
+- [ ] Tool names are domain-semantic, not generic CRUD? (#19 CRUD Names)

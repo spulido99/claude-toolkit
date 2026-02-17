@@ -36,11 +36,13 @@ def get_account_balances(include_details: bool = False) -> dict:
 
 See [Tool Design Skill](../../tool-design/SKILL.md) for complete AI-friendly tool design principles.
 
-## ⚠️ CRITICAL: Security with InjectedState
+## CRITICAL: Security with ToolRuntime
 
-**Never expose user IDs, API keys, or credentials as tool parameters.** The LLM can pass ANY value to tool parameters—this is a security vulnerability.
+**Never expose user IDs, API keys, or credentials as tool parameters.** The LLM can pass ANY value to tool parameters — this is a security vulnerability.
 
-### ❌ INSECURE: User ID as Parameter
+Use `ToolRuntime` from `langchain.tools` to inject secure context invisible to the LLM. This replaces the deprecated `InjectedState` and `InjectedStore` patterns.
+
+### INSECURE: User ID as Parameter
 
 ```python
 @tool
@@ -56,14 +58,13 @@ def send_email(api_key: str, to: str, body: str) -> bool:
     return send_via_api(api_key, to, body)
 ```
 
-### ✅ SECURE: InjectedState Context Injection
+### SECURE: ToolRuntime Context Injection
 
 ```python
 import os
 from dataclasses import dataclass
-from langchain_core.tools import tool
-from langgraph.prebuilt import InjectedState, InjectedStore, create_react_agent
-from typing import Annotated
+from langchain.tools import tool, ToolRuntime
+from deepagents import create_deep_agent
 
 @dataclass
 class SecureContext:
@@ -73,30 +74,32 @@ class SecureContext:
 
 @tool
 def get_user_data(
-    state: Annotated[dict, InjectedState],  # Invisible to LLM
+    runtime: ToolRuntime[SecureContext],  # Invisible to LLM
 ) -> dict:
     """Get current user's profile data."""
-    # SAFE: user_id injected from state, not controllable by LLM
-    user_id = state.get("user_id")  # From injected context
+    # SAFE: user_id from runtime context, not controllable by LLM
+    user_id = runtime.context.user_id
     return fetch_from_db(user_id)
 
 @tool
 def send_email(
     to: str,
     body: str,
-    state: Annotated[dict, InjectedState],  # Invisible to LLM
+    runtime: ToolRuntime[SecureContext],  # Invisible to LLM
 ) -> bool:
     """Send email to specified recipient."""
     # SAFE: API key from context, user_id for audit
     return send_via_api(
-        api_key=state.get("api_key"),
-        from_user=state.get("user_id"),
+        api_key=runtime.context.api_key,
+        from_user=runtime.context.user_id,
         to=to,
         body=body
     )
 
 # Create agent with context schema
-agent = create_react_agent(
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    system_prompt="You are an email assistant.",
     tools=[get_user_data, send_email],
     context_schema=SecureContext,
 )
@@ -116,28 +119,28 @@ result = agent.invoke(
 
 - [ ] No user identifiers as tool parameters
 - [ ] No API keys/tokens as tool parameters
-- [ ] Use `context_schema` + `InjectedState` for sensitive context
-- [ ] Use `interrupt_before` for destructive operations
+- [ ] Use `ToolRuntime` for sensitive context injection
+- [ ] Use `interrupt_on` for destructive operations
 
 ### Preventing Context Leakage
 
-Even with InjectedState, context can leak through error messages, logging, or return values:
+Even with ToolRuntime, context can leak through error messages, logging, or return values:
 
 ```python
-# ❌ BAD: Context leaks in error message
-raise ValueError(f"Failed for user {state.get('user_id')}")
+# BAD: Context leaks in error message
+raise ValueError(f"Failed for user {runtime.context.user_id}")
 
-# ✅ GOOD: Generic error, context in audit logs only
+# GOOD: Generic error, context in audit logs only
 raise ValueError("Operation failed. Check audit logs for details.")
 
-# ❌ BAD: Echoing context back to LLM
-return {"user_id": state.get("user_id"), "data": result}
+# BAD: Echoing context back to LLM
+return {"user_id": runtime.context.user_id, "data": result}
 
-# ✅ GOOD: Only return necessary data
+# GOOD: Only return necessary data
 return {"data": result}
 ```
 
-## ⚠️ CRITICAL: Shell/Execute Tool Security
+## CRITICAL: Shell/Execute Tool Security
 
 The built-in `shell` and `execute` tools are **extremely dangerous** for customer-facing agents. They enable:
 
@@ -160,8 +163,7 @@ If shell access is required, implement strict allowlisting:
 ```python
 import shlex
 import subprocess
-from langchain_core.tools import tool
-from langgraph.prebuilt import InjectedState
+from langchain.tools import tool, ToolRuntime
 from typing import Annotated
 
 ALLOWED_COMMANDS = ["ls", "cat", "grep", "wc", "head", "tail"]
@@ -170,7 +172,7 @@ BLOCKED_ARGS = ["--", "-c", "|", ";", "&", ">", "<", "`", "$"]
 @tool
 def safe_execute(
     command: str,
-    state: Annotated[dict, InjectedState],  # Invisible to LLM
+    runtime: ToolRuntime[SecureContext],  # Invisible to LLM
 ) -> dict:
     """Execute allowlisted commands only in sandboxed environment."""
     # Parse command safely
@@ -233,19 +235,19 @@ For maximum isolation, run commands in ephemeral containers with memory limits, 
 ## Pattern 1: Simple Tool
 
 ```python
-from langchain_core.tools import tool
+from langchain.tools import tool
 
 @tool
 def search_products(query: str, max_results: int = 10) -> list[dict]:
     """Search product catalog for matching items.
-    
+
     Args:
         query: Search terms (product name, category, or keywords)
         max_results: Maximum number of results to return (default: 10)
-        
+
     Returns:
         List of products with id, name, price, description
-        
+
     Example:
         search_products("wireless headphones", max_results=5)
     """
@@ -284,14 +286,14 @@ def analyze_sentiment(
     model: Literal["basic", "advanced", "multilingual"] = "basic"
 ) -> dict:
     """Analyze sentiment of text.
-    
+
     Args:
         text: Text to analyze
         model: Analysis model to use
             - basic: Fast, English only
             - advanced: More accurate, English only
             - multilingual: Supports multiple languages
-            
+
     Returns:
         {
             "sentiment": "positive" | "negative" | "neutral",
@@ -311,25 +313,25 @@ def process_refund(
     reason: str
 ) -> dict:
     """Process customer refund with validation.
-    
+
     Args:
         order_id: Order ID (format: ORD-XXXXXX)
-        amount: Refund amount in USD (must be ≤ order total)
+        amount: Refund amount in USD (must be <= order total)
         reason: Refund reason (customer_request, defective_product, etc.)
-        
+
     Returns:
         {
             "refund_id": str,
             "status": "approved" | "pending" | "rejected",
             "message": str
         }
-        
+
     Raises:
         ValueError: If order_id invalid or amount exceeds order total
     """
     if not order_id.startswith("ORD-"):
         raise ValueError(f"Invalid order_id format: {order_id}")
-    
+
     # Additional validation...
 ```
 
@@ -348,7 +350,7 @@ def process_refund(
 
 ## Documentation Best Practices
 
-### ✅ Good Tool Description
+### Good Tool Description
 
 ```python
 """Search customer database for users matching criteria.
@@ -376,7 +378,7 @@ Example:
 """
 ```
 
-### ❌ Poor Tool Description
+### Poor Tool Description
 
 ```python
 """Search for users."""  # Too vague
@@ -388,12 +390,12 @@ Example:
 @tool
 def api_call_with_retry(endpoint: str, max_retries: int = 3) -> dict:
     """Call external API with automatic retry logic.
-    
+
     Handles common failures:
     - Transient network errors (auto-retry)
     - Rate limiting (exponential backoff)
     - Invalid credentials (immediate fail)
-    
+
     Returns error dict if all retries exhausted:
     {"error": str, "code": str, "retries_attempted": int}
     """
@@ -442,12 +444,12 @@ def db_query_graph(cypher: str) -> list[dict]:
 
 ```python
 import asyncio
-from langchain_core.tools import tool
+from langchain.tools import tool
 
 @tool
 async def batch_process_items(items: list[str]) -> list[dict]:
     """Process multiple items in parallel for better performance.
-    
+
     Processes up to 10 items concurrently. For > 100 items,
     consider using batch_process_large_set() instead.
     """
@@ -464,7 +466,7 @@ from functools import lru_cache
 @lru_cache(maxsize=100)
 def get_static_reference_data(data_type: str) -> dict:
     """Fetch static reference data (cached for performance).
-    
+
     Data types: countries, currencies, timezones, industries
     Cache size: 100 entries
     Cache TTL: Session-based (cleared on agent restart)
@@ -492,9 +494,16 @@ tools_order = [
     calculate_order_total
 ]
 
-# Assign to appropriate subagents
-customer_agent = {"tools": tools_customer}
-order_agent = {"tools": tools_order}
+# Assign to subagents
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    system_prompt="Coordinate customer and order operations.",
+    tools=[],
+    subagents=[
+        {"name": "customer-agent", "tools": tools_customer, "system_prompt": "Handle customers."},
+        {"name": "order-agent", "tools": tools_order, "system_prompt": "Handle orders."},
+    ],
+)
 ```
 
 ### By Access Level
@@ -514,9 +523,13 @@ tools_write = [
     delete_record
 ]
 
-agent = create_react_agent(
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    system_prompt="You manage records.",
     tools=tools_readonly + tools_write,
-    interrupt_before=["create_record", "update_record", "delete_record"],
+    interrupt_on={
+        "tool": {"allowed_decisions": ["approve", "reject", "modify"]},
+    },
 )
 ```
 
@@ -529,11 +542,11 @@ def test_search_products():
     results = search_products("laptop", max_results=5)
     assert len(results) <= 5
     assert all("id" in r for r in results)
-    
+
     # Edge cases
     assert search_products("") == []  # Empty query
     assert search_products("xyz123nonexistent") == []  # No results
-    
+
     # Parameter validation
     with pytest.raises(ValueError):
         search_products("laptop", max_results=-1)
@@ -541,13 +554,13 @@ def test_search_products():
 
 ## Tool Definition Checklist
 
-✅ Consistent `snake_case` naming
-✅ Clear, comprehensive description
-✅ All parameters documented
-✅ Return type specified
-✅ Defaults for optional parameters
-✅ Required parameters marked
-✅ Examples provided
-✅ Error conditions documented
-✅ Performance characteristics noted
-✅ Related tools cross-referenced
+- Consistent `snake_case` naming
+- Clear, comprehensive description
+- All parameters documented
+- Return type specified
+- Defaults for optional parameters
+- Required parameters marked
+- Examples provided
+- Error conditions documented
+- Performance characteristics noted
+- Related tools cross-referenced

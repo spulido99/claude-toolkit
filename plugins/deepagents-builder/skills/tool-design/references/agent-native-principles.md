@@ -120,16 +120,16 @@ Every tool must be classified by its **impact level** to determine what confirma
 ### Mapping to Agent Frameworks
 
 ```python
-# LangGraph interrupt_before pattern
-level_3_plus_tools = [
-    "change_shipping_address", "update_profile",      # Level 3
-    "transfer_funds", "process_refund",                # Level 4
-    "close_account", "delete_all_data"                 # Level 5
-]
+# DeepAgents interrupt_on pattern
+from deepagents import create_deep_agent
 
-agent = create_agent(
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    system_prompt="You handle all operations.",
     tools=all_tools,
-    interrupt_before=level_3_plus_tools
+    interrupt_on={
+        "tool": {"allowed_decisions": ["approve", "reject", "modify"]},
+    },
 )
 ```
 

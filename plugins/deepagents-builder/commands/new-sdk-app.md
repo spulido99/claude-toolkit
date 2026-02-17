@@ -62,9 +62,7 @@ version = "0.1.0"
 description = "{description}"
 requires-python = ">=3.11"
 dependencies = [
-    "langgraph>=0.3.0",
-    "langchain-core>=0.3.0",
-    "langchain-anthropic>=0.3.0",
+    "deepagents>=1.0.0",
     "python-dotenv>=1.0.0",
 ]
 
@@ -83,15 +81,15 @@ build-backend = "hatchling.build"
 
 **Simple Agent:**
 ```python
-from langgraph.prebuilt import create_react_agent
+from deepagents import create_deep_agent
 from langgraph.checkpoint.memory import MemorySaver
 from .tools import your_tools
 from .prompts import SYSTEM_PROMPT
 
 def create_agent():
-    return create_react_agent(
+    return create_deep_agent(
         model="anthropic:claude-sonnet-4-20250514",
-        prompt=SYSTEM_PROMPT,
+        system_prompt=SYSTEM_PROMPT,
         tools=your_tools,
         checkpointer=MemorySaver()
     )
@@ -106,67 +104,69 @@ if __name__ == "__main__":
 
 **Research Agent:**
 ```python
-from langgraph.prebuilt import create_react_agent
+from deepagents import create_deep_agent
+from deepagents.backends import FilesystemBackend
 from langgraph.checkpoint.memory import MemorySaver
 from .tools import internet_search, think_tool
 from .prompts import RESEARCH_PROMPT
 
 def create_research_agent():
-    researcher = create_react_agent(
+    return create_deep_agent(
         model="anthropic:claude-sonnet-4-20250514",
-        tools=[internet_search],
-        prompt="You are an expert researcher. Search thoroughly.",
-        name="researcher",
-    )
-
-    return create_react_agent(
-        model="anthropic:claude-sonnet-4-20250514",
-        tools=[internet_search, think_tool, researcher],
-        prompt=RESEARCH_PROMPT,
+        system_prompt=RESEARCH_PROMPT,
+        tools=[internet_search, think_tool],
+        subagents=[
+            {
+                "name": "researcher",
+                "model": "openai:gpt-4o",
+                "tools": [internet_search],
+                "system_prompt": "You are an expert researcher. Search thoroughly.",
+            },
+        ],
+        backend=FilesystemBackend("./research"),
+        skills=["planning", "summarization"],
         checkpointer=MemorySaver(),
     )
 ```
 
 **Customer Service:**
 ```python
-from langgraph.prebuilt import create_react_agent
+from deepagents import create_deep_agent
 from langgraph.checkpoint.memory import MemorySaver
 from .tools import kb_search, order_lookup, process_refund
 from .prompts import COORDINATOR_PROMPT, INQUIRY_PROMPT, ISSUE_PROMPT
 
 def create_customer_service_agent():
-    # Create specialist agents
-    inquiry_handler = create_react_agent(
+    return create_deep_agent(
         model="anthropic:claude-sonnet-4-20250514",
-        tools=[kb_search],
-        prompt=INQUIRY_PROMPT,
-        name="inquiry-handler",
-    )
-
-    issue_resolver = create_react_agent(
-        model="anthropic:claude-sonnet-4-20250514",
-        tools=[order_lookup, process_refund],
-        prompt=ISSUE_PROMPT,
-        name="issue-resolver",
-    )
-
-    # Parent uses specialists as tools
-    return create_react_agent(
-        model="anthropic:claude-sonnet-4-20250514",
-        tools=[inquiry_handler, issue_resolver],
-        prompt=COORDINATOR_PROMPT,
+        system_prompt=COORDINATOR_PROMPT,
+        tools=[],
+        subagents=[
+            {
+                "name": "inquiry-handler",
+                "tools": [kb_search],
+                "system_prompt": INQUIRY_PROMPT,
+            },
+            {
+                "name": "issue-resolver",
+                "tools": [order_lookup, process_refund],
+                "system_prompt": ISSUE_PROMPT,
+            },
+        ],
         checkpointer=MemorySaver(),
-        interrupt_before=["process_refund"],
+        interrupt_on={
+            "tool": {"allowed_decisions": ["approve", "reject"]},
+        },
     )
 ```
 
 #### src/{project_name}/tools.py
 
 Generate appropriate tools based on agent type with:
-- `@tool` decorator
+- `@tool` decorator from `langchain.tools`
 - Clear docstrings
 - Proper type hints
-- InjectedState for secure context injection
+- `ToolRuntime` for secure context injection when needed
 
 #### src/{project_name}/prompts.py
 

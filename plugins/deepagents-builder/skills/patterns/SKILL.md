@@ -20,12 +20,21 @@ Every agent prompt should include:
 [Escalation/Stopping Criteria]
 ```
 
-### `prompt=` parameter vs `context_schema` runtime context
+### `system_prompt=` parameter vs `AGENTS.md` memory
 
 Both provide instructions/context to the agent, but serve different purposes:
 
-| Use `prompt=` parameter for | Use `context_schema` runtime context for |
-|----------------------------|----------------------------------------|
+| Use `system_prompt=` parameter for | Use `AGENTS.md` memory for |
+|-------------------------------------|---------------------------|
+| Core role definition | Subagent capabilities & descriptions |
+| Hardcoded behavior | Auto-summarized context from past work |
+| Static workflows | Cross-session knowledge persistence |
+| Decision criteria | Capability awareness for delegation |
+
+### `system_prompt=` vs runtime context
+
+| Use `system_prompt=` for | Use `context_schema` / `ToolRuntime` for |
+|--------------------------|----------------------------------------|
 | Core role definition | Per-request dynamic context |
 | Hardcoded behavior | User-specific data (IDs, keys) |
 | Subagent-specific logic | Session-specific settings |
@@ -34,11 +43,9 @@ Both provide instructions/context to the agent, but serve different purposes:
 **Context-driven approach** (recommended for production):
 
 ```python
-from langgraph.prebuilt import create_react_agent
-from langgraph.prebuilt import InjectedState
+from deepagents import create_deep_agent
+from langchain.tools import tool, ToolRuntime
 from dataclasses import dataclass
-from typing import Annotated
-from langchain_core.tools import tool
 
 @dataclass
 class AgentContext:
@@ -47,16 +54,16 @@ class AgentContext:
 
 @tool
 def get_tenant_config(
-    state: Annotated[dict, InjectedState],
+    runtime: ToolRuntime[AgentContext],  # Invisible to LLM
 ) -> dict:
-    """Get tenant-specific configuration from injected state."""
-    return load_config(state.get("tenant_id"))
+    """Get tenant-specific configuration from runtime context."""
+    return load_config(runtime.context.tenant_id)
 
-agent = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
     tools=[get_tenant_config],
-    prompt="You are a support coordinator.",  # Static role
-    context_schema=AgentContext,              # Dynamic context
+    system_prompt="You are a support coordinator.",  # Static role
+    context_schema=AgentContext,                     # Dynamic context
 )
 
 result = agent.invoke(
@@ -65,13 +72,13 @@ result = agent.invoke(
 )
 ```
 
-The `prompt=` parameter defines the agent's static role and behavior. The `context_schema` injects per-request dynamic context accessible via `InjectedState` in tools.
+The `system_prompt=` parameter defines the agent's static role and behavior. The `context_schema` injects per-request dynamic context accessible via `ToolRuntime` in tools.
 
 > **Security Note**: Runtime context via `context_schema` is injected server-side and never exposed to the LLM as tool parameters. For customer-facing agents, see [Security for Customer-Facing Agents](#security-for-customer-facing-agents) to prevent prompt injection attacks.
 
 ## Prompt Patterns by Agent Type
 
-> **Note**: The `system_prompt` key in the example config dicts below maps to the `prompt=` parameter when calling `create_react_agent`.
+> **Note**: The `system_prompt` key in the example config dicts below maps to the `system_prompt=` parameter when calling `create_deep_agent`.
 
 ### Platform Subagent
 
@@ -131,39 +138,15 @@ Deep expertise, specific vocabulary.
 
 ### Coordinator/Orchestrator
 
-Delegates, doesn't execute. Uses the "agent as tool" pattern where subagents become tools for the parent:
+Delegates, doesn't execute. Uses subagent dicts — the native pattern for `create_deep_agent`:
 
 ```python
-from langgraph.prebuilt import create_react_agent
-from langchain_core.tools import tool
+from deepagents import create_deep_agent
 
-# Create specialist agents
-inquiry_handler = create_react_agent(
+# Coordinator uses subagent dicts for delegation
+coordinator = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
-    tools=[kb_search, get_faq],
-    prompt="You answer customer questions using the knowledge base.",
-    name="inquiry-handler",
-)
-
-issue_resolver = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
-    tools=[lookup_issue, create_ticket],
-    prompt="You resolve customer issues and create support tickets.",
-    name="issue-resolver",
-)
-
-order_specialist = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
-    tools=[track_order, process_return],
-    prompt="You handle order tracking and returns.",
-    name="order-specialist",
-)
-
-# Parent coordinator uses subagents as tools
-coordinator = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
-    tools=[inquiry_handler, issue_resolver, order_specialist],
-    prompt="""You coordinate support operations.
+    system_prompt="""You coordinate support operations.
 
 ## You Do NOT
 - Answer questions directly (delegate to inquiry-handler)
@@ -180,6 +163,24 @@ coordinator = create_react_agent(
 - Customer requests human
 - Issue unresolved after 3 attempts
 - Refund > $500""",
+    tools=[],
+    subagents=[
+        {
+            "name": "inquiry-handler",
+            "tools": [kb_search, get_faq],
+            "system_prompt": "You answer customer questions using the knowledge base.",
+        },
+        {
+            "name": "issue-resolver",
+            "tools": [lookup_issue, create_ticket],
+            "system_prompt": "You resolve customer issues and create support tickets.",
+        },
+        {
+            "name": "order-specialist",
+            "tools": [track_order, process_return],
+            "system_prompt": "You handle order tracking and returns.",
+        },
+    ],
 )
 ```
 
@@ -190,13 +191,14 @@ coordinator = create_react_agent(
 Use `MemorySaver` for conversation persistence and HITL:
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from deepagents import create_deep_agent
 from langgraph.checkpoint.memory import MemorySaver
 
-agent = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
+    system_prompt="You are a support agent.",
     tools=[...],
-    checkpointer=MemorySaver()  # Required for interrupt_before
+    checkpointer=MemorySaver(),  # Required for interrupt_on
 )
 
 # Use thread_id for conversation persistence
@@ -207,21 +209,25 @@ result = agent.invoke({"messages": [...]}, config)
 ### Human-in-the-Loop for Sensitive Tools
 
 ```python
-agent = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
+    system_prompt="You are a database administrator.",
     tools=[delete_database, read_database],
     checkpointer=MemorySaver(),
-    interrupt_before=["delete_database"],  # Pause before destructive ops
+    interrupt_on={
+        "tool": {
+            "allowed_decisions": ["approve", "reject", "modify"],
+        }
+    },
 )
 
-# Agent pauses before delete_database, awaits human decision
+# Agent pauses before sensitive tools, awaits human decision
 config = {"configurable": {"thread_id": "session-1"}}
 for event in agent.stream({"messages": [...]}, config, stream_mode="values"):
     if "__interrupt__" in event:
         # Review and approve or reject
-        decision = input("Approve? (y/n): ")
-        if decision == "y":
-            agent.invoke(None, config)  # Resume execution
+        decision = input("Approve? (approve/reject): ")
+        agent.invoke(None, config)  # Resume execution
 ```
 
 ### Completion Signals
@@ -250,17 +256,16 @@ def search_knowledge_base(query: str) -> list[dict]:
     pass
 ```
 
-### Secure Tools with `context_schema` + `InjectedState` (Recommended)
+### Secure Tools with `ToolRuntime` (Recommended)
 
-Never pass user identifiers as parameters. Use `context_schema` with `InjectedState` for context injection:
+Never pass user identifiers as parameters. Use `ToolRuntime` for context injection:
 
 ```python
 import os
 from dataclasses import dataclass
 from typing import Annotated
-from langchain_core.tools import tool
-from langgraph.prebuilt import create_react_agent
-from langgraph.prebuilt import InjectedState
+from langchain.tools import tool, ToolRuntime
+from deepagents import create_deep_agent
 
 @dataclass
 class SecureContext:
@@ -273,19 +278,19 @@ def get_account_bad(user_id: str) -> str:
     """Insecure: user_id exposed to LLM."""
     pass
 
-# Good: user_id from injected state context
+# Good: user_id from ToolRuntime context
 @tool
 def get_account_info(
-    state: Annotated[dict, InjectedState],
+    runtime: ToolRuntime[SecureContext],  # Invisible to LLM
 ) -> str:
-    """Get account info using injected state."""
-    # Access context from state - not visible to LLM
-    user_id = state.get("user_id")
+    """Get account info using secure runtime context."""
+    user_id = runtime.context.user_id
     return fetch_from_db(user_id)
 
 # Create agent with context schema
-agent = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
+    system_prompt="You are an account assistant.",
     tools=[get_account_info],
     context_schema=SecureContext,
 )
@@ -385,25 +390,24 @@ tools = [
 
 ## Security Model
 
-LangGraph uses a secure-by-default model. Implement security at tool/context level:
+DeepAgents uses a secure-by-default model. Implement security at tool/context level:
 
 - **Never** expose user IDs, API keys, or credentials as tool parameters
-- **Always** use `context_schema` + `InjectedState` for context injection
-- **Configure** `interrupt_before` for destructive operations
+- **Always** use `ToolRuntime` for secure context injection
+- **Configure** `interrupt_on` for destructive operations
 - **Sandbox** agent execution for untrusted tasks
 
 ## Security for Customer-Facing Agents
 
 When deploying agents to end users, the key risk is **Prompt Injection** -- a malicious user tricks the agent into performing unintended actions or leaking sensitive data.
 
-**Recommended mitigation**: Use `context_schema` for per-user isolation and `InjectedState` to keep sensitive data out of LLM-visible parameters. Combine with `interrupt_before` for destructive operations.
+**Recommended mitigation**: Use `context_schema` for per-user isolation and `ToolRuntime` to keep sensitive data out of LLM-visible parameters. Combine with `interrupt_on` for destructive operations.
 
 ```python
-from langgraph.prebuilt import create_react_agent, InjectedState
+from deepagents import create_deep_agent
+from langchain.tools import tool, ToolRuntime
 from langgraph.checkpoint.memory import MemorySaver
 from dataclasses import dataclass
-from typing import Annotated
-from langchain_core.tools import tool
 
 @dataclass
 class UserContext:
@@ -412,28 +416,30 @@ class UserContext:
 
 @tool
 def get_user_data(
-    state: Annotated[dict, InjectedState],
+    runtime: ToolRuntime[UserContext],
 ) -> dict:
-    """Get user data using injected context - user_id never exposed to LLM."""
-    user_id = state.get("user_id")
-    return fetch_user_data(user_id)
+    """Get user data using runtime context — user_id never exposed to LLM."""
+    return fetch_user_data(runtime.context.user_id)
 
 @tool
 def delete_user_data(
-    state: Annotated[dict, InjectedState],
+    runtime: ToolRuntime[UserContext],
     confirmation: str,
 ) -> dict:
-    """Delete user data - requires human approval via interrupt."""
-    if "admin" not in state.get("permissions", []):
+    """Delete user data — requires human approval via interrupt."""
+    if "admin" not in runtime.context.permissions:
         return {"error": "insufficient permissions"}
-    return perform_deletion(state.get("user_id"))
+    return perform_deletion(runtime.context.user_id)
 
-agent = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
+    system_prompt="You are a user account assistant.",
     tools=[get_user_data, delete_user_data],
     context_schema=UserContext,
     checkpointer=MemorySaver(),
-    interrupt_before=["delete_user_data"],  # Human approval required
+    interrupt_on={
+        "tool": {"allowed_decisions": ["approve", "reject"]},
+    },
 )
 
 # Each user gets isolated context
@@ -446,9 +452,9 @@ result = agent.invoke(
 
 ### Security Checklist for Production
 
-- [ ] Sensitive data injected via `context_schema`, never as tool parameters
+- [ ] Sensitive data injected via `context_schema` + `ToolRuntime`, never as tool parameters
 - [ ] User context is isolated per-user (not shared)
-- [ ] `interrupt_before` configured for destructive operations
+- [ ] `interrupt_on` configured for destructive operations
 - [ ] Rate limiting on agent invocations
 - [ ] Tool permissions scoped per user role
 
@@ -458,7 +464,7 @@ For complete mitigation strategies (4 strategies), content validation, rate limi
 
 The most common mistakes: God Agent (> 30 tools in one agent), Unclear Boundaries (overlapping subagent responsibilities), Parallel Decision-Making (conflicting choices), Vocabulary Collision (same term means different things), and Premature Decomposition (over-splitting simple tasks).
 
-For the complete catalog of 16 anti-patterns with code examples and fixes, see **[`references/anti-patterns.md`](references/anti-patterns.md)**.
+For the complete catalog of 19 anti-patterns with code examples and fixes, see **[`references/anti-patterns.md`](references/anti-patterns.md)**.
 
 ## Prompt Checklist
 
@@ -489,19 +495,19 @@ Before finalizing tools:
 
 For comprehensive patterns and examples:
 
-- **[API Cheatsheet](references/api-cheatsheet.md)** - Current LangGraph API quick reference
-- **[Prompt Patterns](references/prompt-patterns.md)** - 5 prompt patterns with templates
-- **[Tool Patterns](references/tool-patterns.md)** - Complete tool design guide
-- **[Anti-Patterns](references/anti-patterns.md)** - 16 anti-patterns with fixes
-- **[Security Patterns](references/security-patterns.md)** - Security strategies for customer-facing agents
+- **[API Cheatsheet](references/api-cheatsheet.md)** — Current DeepAgents API quick reference
+- **[Prompt Patterns](references/prompt-patterns.md)** — 5 prompt patterns with templates
+- **[Tool Patterns](references/tool-patterns.md)** — Complete tool design guide with ToolRuntime
+- **[Anti-Patterns](references/anti-patterns.md)** — 19 anti-patterns with fixes
+- **[Security Patterns](references/security-patterns.md)** — Security strategies for customer-facing agents
 
 ### Related Skills
 
-- **[Quickstart](../quickstart/SKILL.md)** - Getting started with DeepAgents
-- **[Architecture](../architecture/SKILL.md)** - Agent topologies and bounded contexts
-- **[Evolution](../evolution/SKILL.md)** - Maturity model and refactoring
-- **[Evals](../evals/SKILL.md)** - Testing and benchmarking
-- **[Tool Design](../tool-design/SKILL.md)** - AI-friendly tool design principles
+- **[Quickstart](../quickstart/SKILL.md)** — Getting started with DeepAgents
+- **[Architecture](../architecture/SKILL.md)** — Agent topologies and bounded contexts
+- **[Tool Design](../tool-design/SKILL.md)** — AI-friendly tool design principles
+- **[Evolution](../evolution/SKILL.md)** — Maturity model and refactoring
+- **[Evals](../evals/SKILL.md)** — Testing and benchmarking
 
 ### Validation
 

@@ -9,19 +9,19 @@ Build production-ready deep agents with planning, context management, and subage
 
 ## What is DeepAgents?
 
-DeepAgents is a set of patterns and skills built on **LangGraph**, LangChain's framework for building agentic applications. The core function is `create_react_agent` from `langgraph.prebuilt`, which implements LangGraph's agent loop — a cycle of reasoning and tool execution that continues until the agent produces a final response.
+DeepAgents (`langchain-ai/deepagents`) is a high-level framework for building agentic applications with planning, filesystem backends, subagent orchestration, and auto-summarization built in. The core function is `create_deep_agent`, which provides:
 
-It provides:
-
-- **ReAct agent loop** — Automatic reasoning + tool calling via `create_react_agent`
-- **Tool composition** — Add any LangChain tool or custom function
-- **Agent-as-tool** — Nest agents as tools for subagent delegation
-- **Checkpointing** — Persist conversation state with `MemorySaver` or database backends
+- **Planning & summarization** — Built-in skills for structured reasoning and context management
+- **Subagent delegation** — Define subagents as dicts, compiled into `CompiledSubAgent` instances
+- **Filesystem backends** — `FilesystemBackend`, `StateBackend`, `StoreBackend`, `CompositeBackend`
+- **AGENTS.md memory** — Declarative agent memory pattern for capability awareness and context persistence
+- **Built-in tools** — `shell`, `edit_file`, `read_file`, `write_file`, `think`, `plan`, `summarize`
+- **Human-in-the-loop** — Rich `interrupt_on` configuration for tool approval
 
 ## Installation
 
 ```bash
-pip install langgraph langchain-core langchain-anthropic
+pip install deepagents
 ```
 
 ## Quick Start
@@ -29,11 +29,11 @@ pip install langgraph langchain-core langchain-anthropic
 ### Minimal Agent
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from deepagents import create_deep_agent
 
-agent = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
-    prompt="You are a helpful research assistant.",
+    system_prompt="You are a helpful research assistant.",
     tools=[],
 )
 
@@ -46,84 +46,90 @@ print(result["messages"][-1].content)
 ### Agent with Custom Tools
 
 ```python
-from langgraph.prebuilt import create_react_agent
-from langchain_core.tools import tool
+from deepagents import create_deep_agent
+from langchain.tools import tool
 
 @tool
 def search_web(query: str) -> str:
     """Search the web for information."""
     return f"Results for: {query}"
 
-agent = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
     tools=[search_web],
-    prompt="You are a research assistant.",
+    system_prompt="You are a research assistant.",
 )
 ```
 
 ### Agent with Subagents
 
-Use the "agent as tool" pattern — create a specialist agent, then pass it as a tool to the parent:
+Define subagents as dicts — the framework compiles them into `CompiledSubAgent` instances:
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from deepagents import create_deep_agent
 
-# Create specialist as standalone agent
-researcher = create_react_agent(
-    model="openai:gpt-4o",
-    tools=[search_web],
-    prompt="You are an expert researcher. Summarize findings concisely. Keep responses under 500 tokens.",
-    name="researcher",
-)
-
-# Use specialist as tool in parent agent
-agent = create_react_agent(
+# Subagents defined as dicts (native pattern)
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
-    tools=[researcher],  # Agent used as tool
-    prompt="You coordinate research projects. Delegate research to the researcher tool.",
+    system_prompt="You coordinate research projects. Delegate research to the researcher and writing to the writer.",
+    tools=[],
+    subagents=[
+        {
+            "name": "researcher",
+            "model": "openai:gpt-4o",
+            "tools": [search_web],
+            "system_prompt": "You are an expert researcher. Summarize findings concisely.",
+        },
+        {
+            "name": "writer",
+            "tools": [write_document],
+            "system_prompt": "You write clear, structured documents.",
+        },
+    ],
 )
 ```
 
-### Agent with Context and Memory
+### Agent with Backend and Memory
 
-Use `context_schema` to inject structured context and `checkpointer` for conversation persistence:
+Use `FilesystemBackend` for file-first agents and `AGENTS.md` for declarative memory:
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from deepagents import create_deep_agent
+from deepagents.backends import FilesystemBackend
 from langgraph.checkpoint.memory import MemorySaver
-from dataclasses import dataclass
 
-@dataclass
-class ProjectContext:
-    project_name: str
-    preferences: dict
-
-agent = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
-    tools=[...],
-    prompt="You are a project assistant.",
-    context_schema=ProjectContext,
+    system_prompt="You are a project assistant.",
+    tools=[],
+    backend=FilesystemBackend("./workspace"),
+    memory="AGENTS.md",
+    skills=["planning", "filesystem"],
     checkpointer=MemorySaver(),
 )
 
-# Invoke with context (invisible to LLM)
+# Invoke with thread persistence
 result = agent.invoke(
-    {"messages": [...]},
-    context=ProjectContext(project_name="my-project", preferences={"format": "markdown"}),
+    {"messages": [{"role": "user", "content": "Set up the project structure"}]},
+    config={"configurable": {"thread_id": "project-1"}},
 )
 ```
 
-## Tools in LangGraph
+## Built-in Tools
 
-LangGraph agents don't include built-in tools — you provide all tools via the `tools=` parameter. Tools can be:
+`create_deep_agent` provides these built-in tools (opt-in via `skills=`):
 
-- **`@tool` decorated functions** — Any Python function with a docstring
-- **LangChain tools** — From `langchain-community` or other integrations
-- **Other agents** — Using the agent-as-tool pattern shown above
+| Tool | Description | Skill |
+|------|-------------|-------|
+| `shell` | Execute shell commands | `"shell"` |
+| `edit_file` | Edit files with diffs | `"filesystem"` |
+| `read_file` | Read file contents | `"filesystem"` |
+| `write_file` | Write files | `"filesystem"` |
+| `think` | Structured reasoning step | `"planning"` |
+| `plan` | Create execution plan | `"planning"` |
+| `summarize` | Summarize context | `"summarization"` |
 
-This gives you full control over what your agent can and cannot do.
-
-> **Security Tip**: Use `interrupt_before` on dangerous tools to require human confirmation before execution. Use `context_schema` to pass user identity and permissions as structured context, rather than embedding user IDs in tool parameters.
+> **Security Tip**: Use `interrupt_on` on dangerous tools to require human confirmation before execution. Use `ToolRuntime` from `langchain.tools` to inject user identity and permissions as secure context, rather than embedding user IDs in tool parameters.
 
 ## When to Use DeepAgents
 
@@ -147,50 +153,50 @@ This gives you full control over what your agent can and cannot do.
 ### Research Agent
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from deepagents import create_deep_agent
+from deepagents.backends import FilesystemBackend
 
-agent = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
-    prompt="""You conduct comprehensive research.
+    system_prompt="""You conduct comprehensive research.
     1. Plan research steps
     2. Search for information
     3. Synthesize into final report""",
     tools=[search_tool],
+    backend=FilesystemBackend("./research"),
+    skills=["planning", "summarization"],
 )
 ```
 
 ### Customer Support Agent
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from deepagents import create_deep_agent
+from langgraph.checkpoint.memory import MemorySaver
 
-# Create specialist agents
-inquiry_handler = create_react_agent(
+agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-20250514",
-    tools=[knowledge_base_tool],
-    prompt="You answer customer questions accurately.",
-    name="inquiry-handler",
-)
-
-issue_resolver = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
-    tools=[ticketing_tool],
-    prompt="You resolve customer problems.",
-    name="issue-resolver",
-)
-
-order_specialist = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
-    tools=[order_tool],
-    prompt="You manage customer orders.",
-    name="order-specialist",
-)
-
-# Coordinator delegates to specialists
-agent = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
-    tools=[inquiry_handler, issue_resolver, order_specialist],
-    prompt="You coordinate customer support. Route inquiries to the appropriate specialist.",
+    system_prompt="You coordinate customer support. Route inquiries to the appropriate specialist.",
+    tools=[],
+    subagents=[
+        {
+            "name": "inquiry-handler",
+            "tools": [knowledge_base_tool],
+            "system_prompt": "You answer customer questions accurately.",
+        },
+        {
+            "name": "issue-resolver",
+            "tools": [ticketing_tool],
+            "system_prompt": "You resolve customer problems.",
+        },
+        {
+            "name": "order-specialist",
+            "tools": [order_tool],
+            "system_prompt": "You manage customer orders.",
+        },
+    ],
+    checkpointer=MemorySaver(),
+    interrupt_on={"tool": {"allowed_decisions": ["approve", "reject"]}},
 )
 ```
 
@@ -208,7 +214,7 @@ model = init_chat_model("openai:gpt-4o")
 # Google
 model = init_chat_model("google_genai:gemini-2.0-flash")
 
-agent = create_react_agent(model=model, tools=[...])
+agent = create_deep_agent(model=model, system_prompt="...", tools=[...])
 ```
 
 ## Interactive Chat Console
@@ -218,14 +224,14 @@ Test your agent interactively with tool call logging:
 ```python
 # chat.py
 import uuid
-from langgraph.prebuilt import create_react_agent
+from deepagents import create_deep_agent
 from langgraph.checkpoint.memory import MemorySaver
 
 def create_my_agent():
-    return create_react_agent(
+    return create_deep_agent(
         model="anthropic:claude-sonnet-4-20250514",
         tools=[...],
-        prompt="Your system prompt here.",
+        system_prompt="Your system prompt here.",
         checkpointer=MemorySaver(),
     )
 
@@ -273,10 +279,10 @@ After basic setup, explore:
 
 - **[Architecture](../architecture/SKILL.md)**: Design agent topologies and bounded contexts
 - **[Patterns](../patterns/SKILL.md)**: System prompts, tool design, anti-patterns
-- **[Tool Design](../tool-design/SKILL.md)**: Best practices for designing agent tools
+- **[Tool Design](../tool-design/SKILL.md)**: Best practices for designing AI-friendly agent tools
 - **[Evals](../evals/SKILL.md)**: Testing, benchmarking, and debugging
 - **[Evolution](../evolution/SKILL.md)**: Maturity model and refactoring strategies
-- **[API Cheatsheet](../patterns/references/api-cheatsheet.md)**: Quick reference for `create_react_agent` parameters
+- **[API Cheatsheet](../patterns/references/api-cheatsheet.md)**: Quick reference for `create_deep_agent` parameters
 
 ### Commands
 

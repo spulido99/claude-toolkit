@@ -26,7 +26,7 @@ Locate the agent creation function in the project.
 - Read the file to extract the function name and detect features
 
 **If no path provided:**
-- Search for `create_react_agent` or `def create_.*agent` patterns across the project using Grep
+- Search for `create_deep_agent`, `create_react_agent`, or `def create_.*agent` patterns across the project using Grep
 - If **multiple matches** found: present them to the user with AskUserQuestion and ask which one to use
 - If **no matches** found: ask the user for the module path and function name using AskUserQuestion
 - If **one match** found: use it directly
@@ -36,6 +36,8 @@ Locate the agent creation function in the project.
 - `agent_function`: the function name (e.g., `create_agent`)
 - `has_context_schema`: whether the agent uses a `context_schema` parameter
 - `has_checkpointer`: whether the agent already creates a `MemorySaver` or other checkpointer
+- `has_interrupt_on`: whether the agent uses `interrupt_on` for HITL
+- `has_subagents`: whether the agent defines `subagents=` dicts
 
 ### Step 2: Determine Features
 
@@ -54,7 +56,7 @@ Write the `chat.py` file at the project root, adapted to the detected agent. Use
 import uuid
 import sys
 
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import MemorySaver  # noqa: used if agent needs checkpointer
 
 # --- Agent import (adapted from detection) ---
 from {agent_module} import {agent_function}
@@ -189,7 +191,7 @@ Apply the following adaptations when generating the final file:
 **Without checkpointer in agent:**
 - Wrap the agent creation to inject a `MemorySaver`:
   ```python
-  from langgraph.checkpoint.memory import MemorySaver
+  from langgraph.checkpoint.memory import MemorySaver  # noqa: used if agent needs checkpointer
 
   # Agent does not include a checkpointer; adding MemorySaver for thread persistence
   agent = {agent_function}(checkpointer=MemorySaver())
