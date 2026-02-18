@@ -45,7 +45,7 @@ agent = create_deep_agent(tools=[tool1, tool2, ..., tool60])
 ```python
 # Level 2 example
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     subagents=[
         {"name": "data-agent", "tools": [...]},
         {"name": "api-agent", "tools": [...]}
@@ -66,7 +66,7 @@ agent = create_deep_agent(
 ```python
 # Level 3 example
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     subagents=[
         {
             "name": "customer-support",

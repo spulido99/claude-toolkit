@@ -124,7 +124,7 @@ Every tool must be classified by its **impact level** to determine what confirma
 from deepagents import create_deep_agent
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You handle all operations.",
     tools=all_tools,
     interrupt_on={

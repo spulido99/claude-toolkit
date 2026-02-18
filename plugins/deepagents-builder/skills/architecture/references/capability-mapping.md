@@ -106,7 +106,7 @@ Capability: Customer Management
 # Bounded Context: Support Operations
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You coordinate customer support operations...",
     
     subagents=[

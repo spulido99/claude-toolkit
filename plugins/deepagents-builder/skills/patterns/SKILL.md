@@ -60,7 +60,7 @@ def get_tenant_config(
     return load_config(runtime.context.tenant_id)
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     tools=[get_tenant_config],
     system_prompt="You are a support coordinator.",  # Static role
     context_schema=AgentContext,                     # Dynamic context
@@ -145,7 +145,7 @@ from deepagents import create_deep_agent
 
 # Coordinator uses subagent dicts for delegation
 coordinator = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="""You coordinate support operations.
 
 ## You Do NOT
@@ -195,7 +195,7 @@ from deepagents import create_deep_agent
 from langgraph.checkpoint.memory import MemorySaver
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You are a support agent.",
     tools=[...],
     checkpointer=MemorySaver(),  # Required for interrupt_on
@@ -210,7 +210,7 @@ result = agent.invoke({"messages": [...]}, config)
 
 ```python
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You are a database administrator.",
     tools=[delete_database, read_database],
     checkpointer=MemorySaver(),
@@ -289,7 +289,7 @@ def get_account_info(
 
 # Create agent with context schema
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You are an account assistant.",
     tools=[get_account_info],
     context_schema=SecureContext,
@@ -432,7 +432,7 @@ def delete_user_data(
     return perform_deletion(runtime.context.user_id)
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You are a user account assistant.",
     tools=[get_user_data, delete_user_data],
     context_schema=UserContext,

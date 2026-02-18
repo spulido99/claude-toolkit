@@ -24,16 +24,16 @@ The high-level API with planning, filesystem backends, subagent orchestration, a
 from deepagents import create_deep_agent
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You are a helpful research assistant.",
     tools=[search, calculate],
     subagents=[
         {"name": "researcher", "tools": [web_search], "system_prompt": "You research topics."},
         {"name": "writer", "tools": [write_doc], "system_prompt": "You write documents."},
     ],
-    backend=FilesystemBackend("./workspace"),
-    memory="AGENTS.md",
-    skills=["planning", "summarization"],
+    backend=FilesystemBackend(root_dir="./workspace"),
+    memory=["./AGENTS.md"],
+    skills=["./skills/"],              # Load SKILL.md files from directory
     middleware=[logging_middleware],
     interrupt_on={"tool": {"allowed_decisions": ["approve", "reject", "modify"]}},
     checkpointer=checkpointer,
@@ -50,8 +50,8 @@ agent = create_deep_agent(
 | `tools` | `list` | List of tools (functions decorated with `@tool`) |
 | `subagents` | `list[dict]` | Subagent definitions as dicts (see §5) |
 | `backend` | `Backend` | Persistence backend (`FilesystemBackend`, `StateBackend`, `StoreBackend`, `CompositeBackend`) |
-| `memory` | `str` | Path to AGENTS.md memory file (see §8) |
-| `skills` | `list[str]` | Built-in skills to enable (`"planning"`, `"summarization"`) |
+| `memory` | `list[str]` | List of file paths for persistent context, e.g. `["./AGENTS.md"]` (see §8) |
+| `skills` | `list[str]` | Directory paths containing SKILL.md files for on-demand loading |
 | `middleware` | `list[Callable]` | Middleware functions that run on each step |
 | `interrupt_on` | `dict` | HITL configuration for tool approval (see §7) |
 | `checkpointer` | `Checkpointer` | Persistence backend for conversation state |
@@ -65,7 +65,7 @@ From `langchain.agents`, provides custom middleware and state management without
 from langchain.agents import create_agent
 
 agent = create_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     tools=[search, calculate],
     system_prompt="You are a helpful assistant.",
     middleware=[logging_middleware, auth_middleware],
@@ -80,7 +80,7 @@ agent = create_agent(
 from langgraph.prebuilt import create_react_agent
 
 agent = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     tools=[search, calculate],
     prompt="You are a helpful assistant.",  # Note: prompt=, not system_prompt=
     checkpointer=checkpointer,
@@ -95,7 +95,7 @@ Always use the `"provider:model"` string format. Do NOT instantiate model object
 
 ```python
 # Correct: string format
-model = "anthropic:claude-sonnet-4-20250514"
+model = "anthropic:claude-sonnet-4-5-20250929"
 model = "openai:gpt-4o"
 model = "google_genai:gemini-2.0-flash"
 
@@ -103,7 +103,7 @@ model = "google_genai:gemini-2.0-flash"
 from langchain.chat_models import init_chat_model
 
 model = init_chat_model(
-    "anthropic:claude-sonnet-4-20250514",
+    "anthropic:claude-sonnet-4-5-20250929",
     temperature=0.7,
     max_tokens=4096,
 )
@@ -113,7 +113,7 @@ model = init_chat_model(
 
 | Provider | Prefix | Example |
 |----------|--------|---------|
-| Anthropic | `anthropic:` | `"anthropic:claude-sonnet-4-20250514"` |
+| Anthropic | `anthropic:` | `"anthropic:claude-sonnet-4-5-20250929"` |
 | OpenAI | `openai:` | `"openai:gpt-4o"` |
 | Google | `google_genai:` | `"google_genai:gemini-2.0-flash"` |
 
@@ -189,7 +189,7 @@ class UserContext:
     permissions: list[str]
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     tools=[get_user_data, update_profile],
     system_prompt="You are a user account assistant.",
     context_schema=UserContext,
@@ -218,7 +218,7 @@ The native pattern for `create_deep_agent`. Define subagents as dicts — the fr
 from deepagents import create_deep_agent
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You coordinate research and writing tasks.",
     tools=[],
     subagents=[
@@ -256,7 +256,7 @@ When you need programmatic access to compiled subagents:
 from deepagents import create_deep_agent, CompiledSubAgent
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="Coordinator.",
     subagents=[...],
 )
@@ -274,7 +274,7 @@ Use `create_supervisor` for explicit orchestration with routing control (mid-lev
 from langgraph_supervisor import create_supervisor
 
 supervisor = create_supervisor(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     agents=[researcher, writer],
     prompt="Route research tasks to researcher, writing tasks to writer.",
 )
@@ -298,19 +298,19 @@ from deepagents.backends import FilesystemBackend, CompositeBackend, StoreBacken
 
 # File-first agent with workspace
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You manage project files.",
     tools=[],
-    backend=FilesystemBackend("./workspace"),
+    backend=FilesystemBackend(root_dir="./workspace"),
 )
 
 # Production: composite backend
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="Production agent.",
     tools=[],
     backend=CompositeBackend([
-        FilesystemBackend("./workspace", read_only=True),
+        FilesystemBackend(root_dir="./workspace", read_only=True),
         StoreBackend(store),
     ]),
 )
@@ -327,7 +327,7 @@ from deepagents import create_deep_agent
 from langgraph.checkpoint.memory import MemorySaver
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You are a support agent with full capabilities.",
     tools=[process_refund, delete_account, read_data],
     checkpointer=MemorySaver(),
@@ -378,10 +378,10 @@ for event in agent.stream({"messages": [...]}, config, stream_mode="values"):
 
 ```python
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You coordinate research projects.",
     subagents=[...],
-    memory="AGENTS.md",  # Agent reads/updates this file
+    memory=["./AGENTS.md"],  # Agent reads/updates this file
 )
 ```
 
@@ -394,24 +394,27 @@ The agent uses AGENTS.md for:
 
 ## 9. Built-in Tools
 
-`create_deep_agent` provides these built-in tools (opt-in via `skills=`):
+Every `create_deep_agent` automatically includes these tools via default middleware:
 
-| Tool | Description | Skill |
-|------|-------------|-------|
-| `shell` | Execute shell commands | `"shell"` |
-| `edit_file` | Edit files with diffs | `"filesystem"` |
-| `read_file` | Read file contents | `"filesystem"` |
-| `write_file` | Write files | `"filesystem"` |
-| `think` | Structured reasoning step | `"planning"` |
-| `plan` | Create execution plan | `"planning"` |
-| `summarize` | Summarize context | `"summarization"` |
+| Tool | Middleware | Description |
+|------|-----------|-------------|
+| `write_todos` | Planning | Create structured task lists |
+| `read_todos` | Planning | View current tasks |
+| `ls` | Filesystem | List directory contents |
+| `read_file` | Filesystem | Read file content with pagination |
+| `write_file` | Filesystem | Create or overwrite files |
+| `edit_file` | Filesystem | Exact string replacements |
+| `glob` | Filesystem | Find files matching patterns |
+| `grep` | Filesystem | Search text in files |
+| `execute` | Filesystem | Run commands in sandbox (if backend supports it) |
+| `task` | SubAgent | Delegate to subagents with isolated contexts |
 
 ```python
+# Built-in tools are automatic — no opt-in needed
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You are a coding assistant.",
-    tools=[custom_tool],
-    skills=["filesystem", "planning"],  # Enables read_file, write_file, edit_file, think, plan
+    tools=[custom_tool],  # Your custom tools are added alongside built-ins
 )
 ```
 
@@ -477,7 +480,7 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 agent = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     tools=[...],
     prompt="You are a helpful assistant.",
     interrupt_before=["dangerous_tool"],
@@ -488,7 +491,7 @@ from deepagents import create_deep_agent
 from langchain.tools import tool, ToolRuntime
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     tools=[...],
     system_prompt="You are a helpful assistant.",
     interrupt_on={"tool": {"allowed_decisions": ["approve", "reject"]}},

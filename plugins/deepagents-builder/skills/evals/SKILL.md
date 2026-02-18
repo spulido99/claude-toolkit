@@ -108,7 +108,7 @@ Validate decision-making in specific scenarios. Token efficient.
 def test_tool_selection():
     """Test agent selects correct tool for task."""
     agent = create_deep_agent(
-        model="anthropic:claude-sonnet-4-20250514",
+        model="anthropic:claude-sonnet-4-5-20250929",
         tools=[search, analyze, report],
     )
 
@@ -128,7 +128,7 @@ Test assertions about agent's end state.
 def test_research_output():
     """Test agent produces complete research report."""
     agent = create_deep_agent(
-        model="anthropic:claude-sonnet-4-20250514",
+        model="anthropic:claude-sonnet-4-5-20250929",
         tools=[search, write_file],
     )
 

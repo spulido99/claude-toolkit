@@ -15,7 +15,7 @@ DeepAgents (`langchain-ai/deepagents`) is a high-level framework for building ag
 - **Subagent delegation** — Define subagents as dicts, compiled into `CompiledSubAgent` instances
 - **Filesystem backends** — `FilesystemBackend`, `StateBackend`, `StoreBackend`, `CompositeBackend`
 - **AGENTS.md memory** — Declarative agent memory pattern for capability awareness and context persistence
-- **Built-in tools** — `shell`, `edit_file`, `read_file`, `write_file`, `think`, `plan`, `summarize`
+- **Built-in tools** — `write_todos`, `read_file`, `write_file`, `edit_file`, `ls`, `glob`, `grep`, `execute`, `task`
 - **Human-in-the-loop** — Rich `interrupt_on` configuration for tool approval
 
 ## Installation
@@ -32,7 +32,7 @@ pip install deepagents
 from deepagents import create_deep_agent
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You are a helpful research assistant.",
     tools=[],
 )
@@ -55,7 +55,7 @@ def search_web(query: str) -> str:
     return f"Results for: {query}"
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     tools=[search_web],
     system_prompt="You are a research assistant.",
 )
@@ -70,7 +70,7 @@ from deepagents import create_deep_agent
 
 # Subagents defined as dicts (native pattern)
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You coordinate research projects. Delegate research to the researcher and writing to the writer.",
     tools=[],
     subagents=[
@@ -99,12 +99,12 @@ from deepagents.backends import FilesystemBackend
 from langgraph.checkpoint.memory import MemorySaver
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You are a project assistant.",
     tools=[],
-    backend=FilesystemBackend("./workspace"),
-    memory="AGENTS.md",
-    skills=["planning", "filesystem"],
+    backend=FilesystemBackend(root_dir="./workspace"),
+    memory=["./AGENTS.md"],
+    skills=["./skills/"],              # Load SKILL.md files from directory
     checkpointer=MemorySaver(),
 )
 
@@ -117,17 +117,20 @@ result = agent.invoke(
 
 ## Built-in Tools
 
-`create_deep_agent` provides these built-in tools (opt-in via `skills=`):
+Every `create_deep_agent` automatically includes these tools via default middleware:
 
-| Tool | Description | Skill |
-|------|-------------|-------|
-| `shell` | Execute shell commands | `"shell"` |
-| `edit_file` | Edit files with diffs | `"filesystem"` |
-| `read_file` | Read file contents | `"filesystem"` |
-| `write_file` | Write files | `"filesystem"` |
-| `think` | Structured reasoning step | `"planning"` |
-| `plan` | Create execution plan | `"planning"` |
-| `summarize` | Summarize context | `"summarization"` |
+| Tool | Middleware | Description |
+|------|-----------|-------------|
+| `write_todos` | Planning | Create structured task lists |
+| `read_todos` | Planning | View current tasks |
+| `ls` | Filesystem | List directory contents |
+| `read_file` | Filesystem | Read file content with pagination |
+| `write_file` | Filesystem | Create or overwrite files |
+| `edit_file` | Filesystem | Exact string replacements |
+| `glob` | Filesystem | Find files matching patterns |
+| `grep` | Filesystem | Search text in files |
+| `execute` | Filesystem | Run commands in sandbox (if backend supports it) |
+| `task` | SubAgent | Delegate to subagents with isolated contexts |
 
 > **Security Tip**: Use `interrupt_on` on dangerous tools to require human confirmation before execution. Use `ToolRuntime` from `langchain.tools` to inject user identity and permissions as secure context, rather than embedding user IDs in tool parameters.
 
@@ -157,14 +160,14 @@ from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="""You conduct comprehensive research.
     1. Plan research steps
     2. Search for information
     3. Synthesize into final report""",
     tools=[search_tool],
-    backend=FilesystemBackend("./research"),
-    skills=["planning", "summarization"],
+    backend=FilesystemBackend(root_dir="./research"),
+    skills=["./skills/"],
 )
 ```
 
@@ -175,7 +178,7 @@ from deepagents import create_deep_agent
 from langgraph.checkpoint.memory import MemorySaver
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You coordinate customer support. Route inquiries to the appropriate specialist.",
     tools=[],
     subagents=[
@@ -206,7 +209,7 @@ agent = create_deep_agent(
 from langchain.chat_models import init_chat_model
 
 # Claude (recommended)
-model = init_chat_model("anthropic:claude-sonnet-4-20250514")
+model = init_chat_model("anthropic:claude-sonnet-4-5-20250929")
 
 # OpenAI
 model = init_chat_model("openai:gpt-4o")
@@ -229,7 +232,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 def create_my_agent():
     return create_deep_agent(
-        model="anthropic:claude-sonnet-4-20250514",
+        model="anthropic:claude-sonnet-4-5-20250929",
         tools=[...],
         system_prompt="Your system prompt here.",
         checkpointer=MemorySaver(),

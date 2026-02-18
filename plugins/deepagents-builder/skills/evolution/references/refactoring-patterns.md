@@ -326,7 +326,7 @@ agent = create_deep_agent(
 
 **agent_config.yaml:**
 ```yaml
-model: anthropic:claude-sonnet-4-20250514
+model: anthropic:claude-sonnet-4-5-20250929
 prompt: You coordinate...
 subagents:
   - name: data-platform

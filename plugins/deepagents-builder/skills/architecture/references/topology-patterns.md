@@ -8,7 +8,7 @@ Detailed patterns for structuring deep agents based on Team Topologies and busin
 
 ```python
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You are a research assistant...",
     tools=[web_search, summarize, report_writer]
 )

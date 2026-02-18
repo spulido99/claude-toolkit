@@ -88,7 +88,7 @@ from .prompts import SYSTEM_PROMPT
 
 def create_agent():
     return create_deep_agent(
-        model="anthropic:claude-sonnet-4-20250514",
+        model="anthropic:claude-sonnet-4-5-20250929",
         system_prompt=SYSTEM_PROMPT,
         tools=your_tools,
         checkpointer=MemorySaver()
@@ -112,7 +112,7 @@ from .prompts import RESEARCH_PROMPT
 
 def create_research_agent():
     return create_deep_agent(
-        model="anthropic:claude-sonnet-4-20250514",
+        model="anthropic:claude-sonnet-4-5-20250929",
         system_prompt=RESEARCH_PROMPT,
         tools=[internet_search, think_tool],
         subagents=[
@@ -123,8 +123,8 @@ def create_research_agent():
                 "system_prompt": "You are an expert researcher. Search thoroughly.",
             },
         ],
-        backend=FilesystemBackend("./research"),
-        skills=["planning", "summarization"],
+        backend=FilesystemBackend(root_dir="./research"),
+        skills=["./skills/"],
         checkpointer=MemorySaver(),
     )
 ```
@@ -138,7 +138,7 @@ from .prompts import COORDINATOR_PROMPT, INQUIRY_PROMPT, ISSUE_PROMPT
 
 def create_customer_service_agent():
     return create_deep_agent(
-        model="anthropic:claude-sonnet-4-20250514",
+        model="anthropic:claude-sonnet-4-5-20250929",
         system_prompt=COORDINATOR_PROMPT,
         tools=[],
         subagents=[

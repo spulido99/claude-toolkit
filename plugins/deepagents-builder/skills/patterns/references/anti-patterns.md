@@ -403,7 +403,7 @@ tools = [
 ```python
 # ❌ BAD: Agent doesn't know what's available
 agent = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     tools=[query_db, send_email, generate_report],
     prompt="You are a helpful assistant."
 )
@@ -415,7 +415,7 @@ agent = create_react_agent(
 ```python
 # ✅ GOOD: Agent knows its resources via detailed prompt
 agent = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     tools=[query_db, send_email, generate_report],
     prompt="""You are a helpful assistant.
 
@@ -452,7 +452,7 @@ from deepagents import create_deep_agent
 from langgraph.checkpoint.memory import MemorySaver
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You are a support agent with full capabilities.",
     tools=[process_refund, delete_account, change_subscription, ...],
     checkpointer=MemorySaver(),
@@ -482,14 +482,14 @@ researcher = create_react_agent(
 )
 
 writer = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     tools=[write_doc],
     prompt="You write documents.",
 )
 
 # Manual agent-as-tool composition
 coordinator = create_react_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     tools=[researcher, writer],
     prompt="Coordinate research and writing.",
     interrupt_before=["write_doc"],
@@ -504,15 +504,15 @@ from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="Coordinate research and writing.",
     tools=[],
     subagents=[
         {"name": "researcher", "model": "openai:gpt-4o", "tools": [web_search], "system_prompt": "You research topics."},
         {"name": "writer", "tools": [write_doc], "system_prompt": "You write documents."},
     ],
-    backend=FilesystemBackend("./workspace"),
-    skills=["planning", "summarization"],
+    backend=FilesystemBackend(root_dir="./workspace"),
+    skills=["./skills/"],
     interrupt_on={"tool": {"allowed_decisions": ["approve", "reject"]}},
 )
 ```

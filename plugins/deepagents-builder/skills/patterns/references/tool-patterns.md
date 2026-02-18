@@ -98,7 +98,7 @@ def send_email(
 
 # Create agent with context schema
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You are an email assistant.",
     tools=[get_user_data, send_email],
     context_schema=SecureContext,
@@ -496,7 +496,7 @@ tools_order = [
 
 # Assign to subagents
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="Coordinate customer and order operations.",
     tools=[],
     subagents=[
@@ -524,7 +524,7 @@ tools_write = [
 ]
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You manage records.",
     tools=tools_readonly + tools_write,
     interrupt_on={

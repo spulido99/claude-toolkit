@@ -431,7 +431,7 @@ level_5_tools = [close_account, delete_all_data]
 all_tools = level_1_tools + level_2_tools + level_3_tools + level_4_tools + level_5_tools
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You handle all account operations.",
     tools=all_tools,
     checkpointer=MemorySaver(),
@@ -664,14 +664,14 @@ from domains.orders.tools import TOOLS as order_tools
 
 # Option 1: Single agent with all tools (simple)
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     tools=banking_tools + support_tools + order_tools,
     system_prompt="You handle banking, support, and order operations.",
 )
 
 # Option 2: Subagents by domain (recommended for 15+ tools)
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="Delegate to the right specialist.",
     tools=[],
     subagents=[

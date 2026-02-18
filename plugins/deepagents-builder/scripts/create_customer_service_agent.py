@@ -319,7 +319,7 @@ Handle all order-related operations: lookup, tracking, modifications.
     
     # Create main orchestrator agent
     agent = create_deep_agent(
-        model="anthropic:claude-sonnet-4-20250514",
+        model="anthropic:claude-sonnet-4-5-20250929",
         
         system_prompt="""You are a Customer Service Coordinator for an e-commerce company.
 

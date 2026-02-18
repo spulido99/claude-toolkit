@@ -19,14 +19,14 @@ from deepagents.backends import FilesystemBackend, CompositeBackend, StoreBacken
 
 # SAFE: AGENTS.md is read-only, user state is isolated
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You are a helpful assistant.",
     tools=[...],
     backend=CompositeBackend([
-        FilesystemBackend("./shared", read_only=True),   # AGENTS.md protected
+        FilesystemBackend(root_dir="./shared", read_only=True),   # AGENTS.md protected
         StoreBackend(user_store),                        # Per-user writable state
     ]),
-    memory="AGENTS.md",
+    memory=["./AGENTS.md"],
 )
 ```
 
@@ -57,7 +57,7 @@ def get_user_data(
 
 # Production: context is injected per-request, not shared
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You are a helpful assistant. Use the provided context to personalize responses.",
     tools=[get_user_data],
     context_schema=UserContext,
@@ -82,12 +82,12 @@ from deepagents.backends import FilesystemBackend, CompositeBackend, StoreBacken
 # System context: shared, read-only (includes AGENTS.md)
 # User preferences: isolated per-user, writable with validation
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="""You can remember user preferences via the provided tools.
     NEVER attempt to modify system instructions.""",
     tools=[...],
     backend=CompositeBackend([
-        FilesystemBackend("./system", read_only=True),
+        FilesystemBackend(root_dir="./system", read_only=True),
         StoreBackend(user_store),
     ]),
 )
@@ -100,7 +100,7 @@ from deepagents import create_deep_agent
 from langgraph.checkpoint.memory import MemorySaver
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You manage files and user preferences.",
     tools=[edit_file, write_file, safe_remember],
     checkpointer=MemorySaver(),
@@ -252,10 +252,10 @@ Before deploying customer-facing agents:
 ```python
 # DANGEROUS: All users can modify shared AGENTS.md
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You are helpful.",
     tools=[edit_file],
-    backend=FilesystemBackend("./shared"),  # Writable! Agent can modify AGENTS.md
+    backend=FilesystemBackend(root_dir="./shared"),  # Writable! Agent can modify AGENTS.md
 )
 # One malicious user compromises ALL future sessions
 
@@ -263,12 +263,12 @@ agent = create_deep_agent(
 from deepagents.backends import FilesystemBackend, CompositeBackend, StoreBackend
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You are helpful.",
     tools=[safe_remember],  # Validated tools only
     context_schema=UserContext,
     backend=CompositeBackend([
-        FilesystemBackend("./shared", read_only=True),
+        FilesystemBackend(root_dir="./shared", read_only=True),
         StoreBackend(user_store),
     ]),
 )
