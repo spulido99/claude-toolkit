@@ -6,7 +6,7 @@ Personal marketplace of plugins, skills, and commands for Claude Code.
 
 | Plugin | Description | Components |
 |--------|-------------|------------|
-| **[deepagents-builder](plugins/deepagents-builder)** | Build AI agents with LangChain's DeepAgents | 5 skills, 3 commands, 2 agents |
+| **[deepagents-builder](plugins/deepagents-builder)** | Build AI agents with LangChain's DeepAgents | 6 skills, 14 commands, 6 agents |
 | **[digital-marketing](plugins/digital-marketing)** | Digital marketing campaigns with Chrome automation | 1 skill |
 | **[linkedin-ai-voice](plugins/linkedin-ai-voice)** | LinkedIn AI thought leadership content | 1 skill |
 
@@ -54,23 +54,19 @@ cp -r plugins/deepagents-builder /path/to/your/project/.claude-plugin/
 
 ### deepagents-builder
 
-Build production-ready AI agents with LangChain's DeepAgents framework.
+Build production-ready AI agents with LangChain's DeepAgents framework. Follows an Evals-Driven Development (EDD) workflow.
 
-**Skills:**
-- `quickstart` - Get started quickly
-- `architecture` - Design agent topologies
-- `patterns` - Prompts, tools, security
-- `evolution` - Maturity and refactoring
-- `evals` - Testing and benchmarking
+**Skills (6):**
+- `quickstart` — Get started quickly
+- `architecture` — Design agent topologies
+- `patterns` — Prompts, tools, security
+- `tool-design` — AI-friendly tool design (10 principles)
+- `evals` — Evals-Driven Development
+- `evolution` — Maturity model and refactoring
 
-**Commands:**
-- `/new-sdk-app` - Create new project
-- `/design-topology` - Design architecture
-- `/validate-agent` - Check for anti-patterns
+**Commands (14):** Build (`/new-sdk-app`, `/design-topology`, `/design-tools`, `/add-tool`, `/add-interactive-chat`), Test (`/design-evals`, `/eval`, `/add-scenario`, `/eval-status`, `/eval-update`), Validate & Evolve (`/validate-agent`, `/tool-status`, `/assess`, `/evolve`)
 
-**Agents:**
-- `agent-architect` - Design assistance
-- `code-reviewer` - Code review
+**Agents (6):** `agent-architect`, `code-reviewer`, `tool-architect`, `eval-designer`, `eval-runner`, `evolution-guide`
 
 ### digital-marketing
 
