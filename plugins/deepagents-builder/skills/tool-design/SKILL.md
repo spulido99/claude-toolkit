@@ -854,3 +854,4 @@ Quick self-check:
 
 - **[Tool Patterns](../patterns/references/tool-patterns.md)** - Design patterns for tool granularity, naming, and security
 - **[API Cheatsheet](../patterns/references/api-cheatsheet.md)** - Quick reference for API-to-tool conversion
+- **[Evals](../evals/SKILL.md)** — Test Operation Level flows (`pending_confirmation`, `interrupt_on`), idempotency, error response suggestions, and tool graph navigation

@@ -79,6 +79,8 @@ agent = create_deep_agent(
 
 **Next step:** Apply Team Topologies, establish metrics
 
+> **Tip**: Use `/design-evals` to scaffold your first eval dataset. This is the key step in reaching Level 4 (Measured).
+
 ### Level 4: Measured (Optimized)
 
 **Symptoms:**
@@ -261,7 +263,7 @@ subagents=[
 - **[Quickstart](../quickstart/SKILL.md)** - Getting started with DeepAgents
 - **[Architecture](../architecture/SKILL.md)** - Agent topologies and bounded contexts
 - **[Patterns](../patterns/SKILL.md)** - System prompts, tool design, anti-patterns
-- **[Evals](../evals/SKILL.md)** - Testing and benchmarking
+- **[Evals](../evals/SKILL.md)** - Evals-Driven Development with JTBD scenarios, trajectory evaluation, and snapshot testing
 
 ### Commands
 

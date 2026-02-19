@@ -283,7 +283,7 @@ After basic setup, explore:
 - **[Architecture](../architecture/SKILL.md)**: Design agent topologies and bounded contexts
 - **[Patterns](../patterns/SKILL.md)**: System prompts, tool design, anti-patterns
 - **[Tool Design](../tool-design/SKILL.md)**: Best practices for designing AI-friendly agent tools
-- **[Evals](../evals/SKILL.md)**: Testing, benchmarking, and debugging
+- **[Evals](../evals/SKILL.md)**: Evals-Driven Development — design scenarios, build datasets, iterate. Run `/design-evals` to get started.
 - **[Evolution](../evolution/SKILL.md)**: Maturity model and refactoring strategies
 - **[API Cheatsheet](../patterns/references/api-cheatsheet.md)**: Quick reference for `create_deep_agent` parameters
 

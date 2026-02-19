@@ -507,7 +507,7 @@ For comprehensive patterns and examples:
 - **[Architecture](../architecture/SKILL.md)** — Agent topologies and bounded contexts
 - **[Tool Design](../tool-design/SKILL.md)** — AI-friendly tool design principles
 - **[Evolution](../evolution/SKILL.md)** — Maturity model and refactoring
-- **[Evals](../evals/SKILL.md)** — Testing and benchmarking
+- **[Evals](../evals/SKILL.md)** — Evals-Driven Development — test `interrupt_on` flows, `signal_task_complete` assertions, escalation boundary scenarios
 
 ### Validation
 

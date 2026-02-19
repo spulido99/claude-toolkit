@@ -437,7 +437,7 @@ For detailed patterns and implementation guidance:
 - **[Anti-Patterns](../patterns/references/anti-patterns.md)** - 16 anti-patterns with fixes
 - **[Quickstart](../quickstart/SKILL.md)** - Quick start guide with code examples
 - **[Evolution](../evolution/SKILL.md)** - Maturity model and refactoring strategies
-- **[Evals](../evals/SKILL.md)** - Testing, benchmarking, and debugging
+- **[Evals](../evals/SKILL.md)** - Evals-Driven Development — validate bounded contexts, measure token efficiency, hierarchical multi-agent evaluation
 
 ### Commands
 
