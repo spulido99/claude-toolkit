@@ -257,8 +257,10 @@ python -m {project_name}.chat
 
 ### Step 6: Next Steps
 
-Suggest:
-- Use `/design-topology` to refine agent architecture
-- Use `/validate-agent` to check for anti-patterns
-- Run tests with `pytest`
-- Enable LangSmith tracing for debugging
+Suggest the EDD workflow:
+1. `/design-topology` — Refine agent architecture (if multi-agent needed)
+2. `/design-tools` — Design AI-friendly tools for your agent
+3. `/add-interactive-chat` — Test agent manually first
+4. `/design-evals` — Create eval scenarios from JTBD (start EDD early)
+5. `/validate-agent` — Check for anti-patterns and security issues
+6. `/assess` — Check architecture maturity level

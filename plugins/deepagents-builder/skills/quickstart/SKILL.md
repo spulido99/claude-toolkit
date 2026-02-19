@@ -282,14 +282,29 @@ After basic setup, explore:
 
 - **[Architecture](../architecture/SKILL.md)**: Design agent topologies and bounded contexts
 - **[Patterns](../patterns/SKILL.md)**: System prompts, tool design, anti-patterns
-- **[Tool Design](../tool-design/SKILL.md)**: Best practices for designing AI-friendly agent tools
+- **[Tool Design](../tool-design/SKILL.md)**: AI-friendly tool design principles. Run `/design-tools` to create your tool catalog.
 - **[Evals](../evals/SKILL.md)**: Evals-Driven Development — design scenarios, build datasets, iterate. Run `/design-evals` to get started.
-- **[Evolution](../evolution/SKILL.md)**: Maturity model and refactoring strategies
+- **[Evolution](../evolution/SKILL.md)**: Maturity model and refactoring. Run `/assess` to check your agent's maturity level.
 - **[API Cheatsheet](../patterns/references/api-cheatsheet.md)**: Quick reference for `create_deep_agent` parameters
 
 ### Commands
 
-- `/new-sdk-app` - Scaffold a new DeepAgents project with dependencies and examples
-- `/add-interactive-chat` - Generate an interactive chat console for your agent
-- `/design-topology` - Interactive guide to design optimal agent topology
-- `/validate-agent` - Check agent code for anti-patterns and security issues
+**Build**:
+- `/new-sdk-app` — Scaffold a new DeepAgents project
+- `/design-topology` — Design optimal agent topology
+- `/design-tools` — Design AI-friendly tool catalog
+- `/add-interactive-chat` — Generate interactive chat console
+
+**Test (EDD)**:
+- `/design-evals` — Scaffold eval suite from JTBD
+- `/eval` — Run evals (snapshot | --smoke | --full | --report | --diagnose)
+- `/add-scenario` — Add eval scenario interactively or from trace
+- `/eval-status` — Eval dataset health dashboard
+- `/eval-update` — Review changed snapshots
+
+**Validate & Evolve**:
+- `/validate-agent` — Anti-pattern and security check
+- `/tool-status` — Tool quality dashboard
+- `/add-tool` — Add a single tool to existing catalog
+- `/assess` — Architecture maturity assessment (80-point)
+- `/evolve` — Guided refactoring to next maturity level

@@ -267,4 +267,6 @@ subagents=[
 
 ### Commands
 
-Use `/validate-agent` to assess current architecture maturity.
+- `/assess` — Run the 80-point maturity assessment with level determination and next-level recommendations
+- `/evolve` — Guided refactoring to the next maturity level (interactive, step-by-step, with EDD checkpoints)
+- `/validate-agent` — Quick anti-pattern and security check (simplified scoring)

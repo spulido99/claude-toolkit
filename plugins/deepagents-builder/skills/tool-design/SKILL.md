@@ -843,6 +843,27 @@ Quick self-check:
 - [ ] Level 3+ tools return pending_confirmation first (Principle 9)
 - [ ] Transactional tools accept idempotency_key (Principle 10)
 
+## Workflow
+
+The tool design workflow follows a design-build-validate cycle:
+
+```
+/design-tools → Catalog → /add-tool → /tool-status → /design-evals
+                             ↑               |
+                             └── fix issues ──┘
+```
+
+1. **Design**: `/design-tools` creates a tool catalog from requirements or APIs
+2. **Extend**: `/add-tool` adds individual tools matching existing patterns
+3. **Validate**: `/tool-status` checks quality scores against the 10 principles + eval coverage
+4. **Test**: `/design-evals` creates eval scenarios for your tools (EDD)
+
+## Commands
+
+- `/design-tools` — Design a complete AI-friendly tool catalog (interactive)
+- `/add-tool` — Add a single tool to an existing catalog
+- `/tool-status` — Tool quality dashboard with per-principle scoring and eval coverage
+
 ## References
 
 - **[AI-Friendly API Principles](references/ai-friendly-principles.md)** - Complete AI-friendly API design reference

@@ -23,6 +23,11 @@ description: |
   User: Design tools for my customer support agent
   Action: Use tool-architect to create domain-organized tool catalog
   </example>
+
+  <example>
+  User: Add a refund tool to my existing banking tools
+  Action: Use tool-architect in incremental mode to design and add the tool
+  </example>
 ---
 
 # Tool Architect
@@ -277,6 +282,49 @@ Run the quality checklist from the tool-design skill (`references/tool-quality-c
 | Graph | available_actions present and logical | |
 
 Report results as a table with pass/fail for each tool. Suggest fixes for any failures.
+
+### Phase 6: Single Tool Additions (Incremental Mode)
+
+For `/add-tool` — add a single tool to an existing catalog.
+
+#### Step 6.1: Read Existing Catalog
+
+1. Search for tool files: `domains/*/tools.py`, `tools.py`, `*_tools.py`, MCP JSON
+2. Parse existing tools: names, domains, operation levels, parameter patterns, naming conventions
+3. Build context: domain glossary, response format used, tool graph connections
+
+Report: "Found N tools across M domains: [list]. Naming: snake_case, domain_operation."
+
+#### Step 6.2: Gather Requirements
+
+Ask one at a time:
+1. "What should the new tool do? Describe the user action."
+2. "Which domain?" (list existing, or "new domain")
+3. "What operation level? (1-Read, 2-Create, 3-Update, 4-Financial, 5-Irreversible)"
+
+#### Step 6.3: Design Tool
+
+Design following existing patterns + 10 principles:
+- Name matches existing convention and domain prefix
+- Trigger phrases in docstring
+- Parameters use same types/constraints as sibling tools
+- Response uses same envelope (data, formatted, available_actions, message_for_user)
+- Available actions connect to existing tool graph
+
+Present spec for approval before generating code.
+
+#### Step 6.4: Generate and Insert
+
+1. Generate code matching existing format (Python `@tool` or MCP JSON)
+2. Append to appropriate domain `tools.py` or create new domain module
+3. Update domain's `TOOLS` export list
+4. Update tool graph: add new tool to relevant `available_actions` in existing tools
+
+#### Step 6.5: Verify and Connect to Evals
+
+1. Run quality checklist against new tool only
+2. If `evals/` exists: suggest `/add-scenario` to create eval scenarios for this tool
+3. If no evals: suggest `/design-evals` to scaffold eval suite
 
 ## Key Principles Reference
 
