@@ -17,20 +17,20 @@ Tools should return structured responses with navigation:
 ```python
 @tool
 def get_account_balances(include_details: bool = False) -> dict:
-    """Consulta saldos de todas las cuentas.
+    """Retrieve balances for all accounts.
 
-    Usar cuando el usuario pregunte:
-    - 'cuanto tengo?'
-    - 'mi saldo'
+    Use when the user says:
+    - 'check my balance'
+    - 'how much do I have'
 
     Args:
-        include_details: Incluir numero de cuenta y tipo
+        include_details: Include account number and type
     """
     return {
         "data": [...],
-        "formatted": "Tus cuentas:\n  - Cuenta PYG: Gs. 5.000.000",
+        "formatted": "Your accounts:\n  - PYG Account: Gs. 5,000,000",
         "available_actions": ["get_transactions", "transfer_funds"],
-        "message_for_user": "Tus cuentas:\n  - Cuenta PYG: Gs. 5.000.000"
+        "message_for_user": "Your accounts:\n  - PYG Account: Gs. 5,000,000"
     }
 ```
 

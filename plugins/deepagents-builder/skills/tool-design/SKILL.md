@@ -23,7 +23,7 @@ def get_resource(resource_type: str, resource_id: str) -> dict:
 def get_account_balances(account_id: str) -> dict:
     """Retrieve current balances for all sub-accounts (checking, savings, credit).
 
-    Usar cuando el usuario diga: "check my balance", "how much do I have",
+    Use when the user says: "check my balance", "how much do I have",
     "account balance", "what's in my account".
 
     Returns:
@@ -57,7 +57,7 @@ def search_transactions(
 ) -> dict:
     """Search transaction history by description, merchant, or amount.
 
-    Usar cuando el usuario diga: "find a charge", "search my transactions",
+    Use when the user says: "find a charge", "search my transactions",
     "look for a payment", "when did I pay", "find purchase from [merchant]".
 
     Args:
@@ -92,7 +92,7 @@ def find_customer(
 ) -> dict:
     """Find a customer by name, email, or phone number.
 
-    Usar cuando el usuario diga: "find customer", "look up [name]",
+    Use when the user says: "find customer", "look up [name]",
     "search for client".
 
     At least one parameter is required. Returns best matches ranked
@@ -457,7 +457,7 @@ def transfer_funds(
 
     Operation Level: 4 (Financial - requires user confirmation)
 
-    Usar cuando el usuario diga: "transfer money", "send funds",
+    Use when the user says: "transfer money", "send funds",
     "move money between accounts".
     """
     pass
@@ -714,7 +714,7 @@ def get_account_balances(account_id: str) -> dict:
 
     Operation Level: 1 (Read)
 
-    Usar cuando el usuario diga: "check my balance", "how much do I have",
+    Use when the user says: "check my balance", "how much do I have",
     "account balance", "what's in my account".
 
     Args:
@@ -770,7 +770,7 @@ JSON tool definition following Model Context Protocol (MCP) format.
 ```json
 {
   "name": "get_account_balances",
-  "description": "Retrieve current balances for all sub-accounts (checking, savings, credit).\n\nOperation Level: 1 (Read)\n\nUsar cuando el usuario diga: \"check my balance\", \"how much do I have\", \"account balance\", \"what's in my account\".",
+  "description": "Retrieve current balances for all sub-accounts (checking, savings, credit).\n\nOperation Level: 1 (Read)\n\nUse when the user says: \"check my balance\", \"how much do I have\", \"account balance\", \"what's in my account\".",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -790,7 +790,7 @@ JSON tool definition following Model Context Protocol (MCP) format.
 ```json
 {
   "name": "transfer_funds",
-  "description": "Transfer funds between accounts.\n\nOperation Level: 4 (Financial - requires user confirmation)\n\nUsar cuando el usuario diga: \"transfer money\", \"send funds\", \"move money between accounts\".",
+  "description": "Transfer funds between accounts.\n\nOperation Level: 4 (Financial - requires user confirmation)\n\nUse when the user says: \"transfer money\", \"send funds\", \"move money between accounts\".",
   "inputSchema": {
     "type": "object",
     "properties": {

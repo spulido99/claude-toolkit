@@ -41,7 +41,7 @@ For each tool, check these patterns statically (no execution needed):
 | # | Principle | Check | Pass Condition |
 |---|-----------|-------|----------------|
 | 1 | Semantic name | Function name pattern | Not bare `get_`, `post_`, `update_`, `delete_` prefix without domain |
-| 2 | Trigger phrases | Docstring content | Contains "cuando" or "when the user" or multiple quoted phrases |
+| 2 | Trigger phrases | Docstring content | Contains "when the user says" or multiple quoted trigger phrases |
 | 3 | Structured types | Parameter types | Money params use `dict` not `float`; dates mention ISO format |
 | 4 | Actionable errors | Return statements | Error returns include `code` and `remediation` fields |
 | 5 | Consistent terminology | Cross-tool comparison | Same param names across tools in same domain (e.g., always `account_id` not mixed) |

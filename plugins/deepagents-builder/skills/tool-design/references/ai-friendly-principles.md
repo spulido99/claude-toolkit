@@ -61,7 +61,7 @@ def tool_name(param1: str, param2: dict) -> dict:
 
     Operation Level: N (Category)
 
-    Usar cuando el usuario diga:
+    Use when the user says:
     - 'trigger phrase 1'
     - 'trigger phrase 2'
     - 'trigger phrase 3'
@@ -79,10 +79,10 @@ def tool_name(param1: str, param2: dict) -> dict:
 
 Trigger phrases bridge the gap between how users speak and how tools are named:
 
-- Include **colloquial variations**: "cuanto tengo", "my balance", "how much money"
+- Include **colloquial variations**: "how much do I have", "my balance", "how much money"
 - Include **partial phrases**: "check balance", "see my account"
 - Include **intent synonyms**: "transfer", "send money", "move funds"
-- Write them in the **primary language of the users** (e.g., Spanish for LATAM products)
+- Write them in the **primary language of the users**
 
 ### What LLMs Actually Read
 
@@ -295,7 +295,7 @@ These principles map directly to the **Model Context Protocol (MCP)** tool defin
 ```json
 {
   "name": "get_account_balances",
-  "description": "Retrieve current balances for all sub-accounts (checking, savings, credit).\n\nOperation Level: 1 (Read - no confirmation needed)\n\nUsar cuando el usuario diga: \"check my balance\", \"how much do I have\", \"cuanto tengo\", \"mi saldo\".\n\nReturns balances by sub-account with currency and as-of timestamp.",
+  "description": "Retrieve current balances for all sub-accounts (checking, savings, credit).\n\nOperation Level: 1 (Read - no confirmation needed)\n\nUse when the user says: \"check my balance\", \"how much do I have\", \"account balance\", \"what's in my account\".\n\nReturns balances by sub-account with currency and as-of timestamp.",
   "inputSchema": {
     "type": "object",
     "properties": {

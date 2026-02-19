@@ -312,22 +312,22 @@ Tools are organized by **business domain**. Each domain has its own vocabulary, 
 
 ```
 domains/
-  cuentas/             # Accounts domain
+  accounts/            # Accounts domain
     tools.py           # get_account_balances, get_account_details, find_account
     schemas.py         # Account, Balance types
     formatters.py      # format_balances, format_account_details
 
-  transferencias/      # Transfers domain
+  transfers/           # Transfers domain
     tools.py           # transfer_funds, confirm_transfer, get_transfer_status
     schemas.py         # Transfer, Money types
     formatters.py      # format_transfer_summary
 
-  inversiones/         # Investments domain
+  investments/         # Investments domain
     tools.py           # get_investments, create_investment, simulate_investment
     schemas.py         # Investment, Term types
     formatters.py      # format_investment_summary
 
-  soporte/             # Support domain
+  support/             # Support domain
     tools.py           # create_support_ticket, get_ticket_status
     schemas.py         # Ticket types
     formatters.py      # format_ticket_summary
@@ -344,19 +344,19 @@ domains/
 ### Agent Registration
 
 ```python
-from domains.cuentas.tools import TOOLS as cuentas_tools
-from domains.transferencias.tools import TOOLS as transferencias_tools
-from domains.inversiones.tools import TOOLS as inversiones_tools
+from domains.accounts.tools import TOOLS as accounts_tools
+from domains.transfers.tools import TOOLS as transfers_tools
+from domains.investments.tools import TOOLS as investments_tools
 
 # Flat registration (all tools available to one agent)
-agent = create_agent(tools=cuentas_tools + transferencias_tools + inversiones_tools)
+agent = create_agent(tools=accounts_tools + transfers_tools + investments_tools)
 
 # Or domain-isolated sub-agents
 agent = create_agent(
     subagents=[
-        {"name": "cuentas", "tools": cuentas_tools},
-        {"name": "transferencias", "tools": transferencias_tools},
-        {"name": "inversiones", "tools": inversiones_tools},
+        {"name": "accounts", "tools": accounts_tools},
+        {"name": "transfers", "tools": transfers_tools},
+        {"name": "investments", "tools": investments_tools},
     ]
 )
 ```

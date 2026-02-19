@@ -16,7 +16,7 @@ Use this checklist to verify every tool before shipping. Each section maps to pr
 ## Descriptions & Discovery
 
 - [ ] Description has a **clear one-line summary** of what the tool does
-- [ ] Description includes **trigger phrases** in the user's primary language ("Usar cuando el usuario diga: ...")
+- [ ] Description includes **trigger phrases** in the user's primary language ("Use when the user says: ...")
 - [ ] All parameters are **documented** with type, format, example value, and constraints
 - [ ] Description includes at least one **response example** or describes the response structure
 
@@ -52,7 +52,7 @@ Use this checklist to verify every tool before shipping. Each section maps to pr
 
 ## Organization
 
-- [ ] Tool belongs to a **domain group** (e.g., `cuentas`, `transferencias`, `inversiones`) with other related tools
+- [ ] Tool belongs to a **domain group** (e.g., `accounts`, `transfers`, `investments`) with other related tools
 - [ ] Domain module exports a **`TOOLS` list** for easy registration with the agent framework
 - [ ] Tool has **max 15 parameters** — if more are needed, split into multiple tools or use nested objects
 - [ ] Domain has **max 10 tools** — if more are needed, split into sub-domains

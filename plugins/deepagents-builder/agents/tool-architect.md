@@ -133,7 +133,7 @@ domain: banking
 operation_level: 1 (Read)
 description: >
   Retrieve current balances for all sub-accounts (checking, savings, credit).
-  Usar cuando el usuario diga: "check my balance", "how much do I have",
+  Use when the user says: "check my balance", "how much do I have",
   "account balance", "what's in my account".
 parameters:
   - name: account_id
@@ -195,7 +195,7 @@ def get_account_balances(account_id: str) -> dict:
 
     Operation Level: 1 (Read)
 
-    Usar cuando el usuario diga: "check my balance", "how much do I have",
+    Use when the user says: "check my balance", "how much do I have",
     "account balance", "what's in my account".
 
     Args:
@@ -228,7 +228,7 @@ Generate JSON tool definitions with `inputSchema`:
 ```json
 {
   "name": "get_account_balances",
-  "description": "Retrieve current balances for all sub-accounts.\n\nOperation Level: 1 (Read)\n\nUsar cuando el usuario diga: \"check my balance\", \"how much do I have\".",
+  "description": "Retrieve current balances for all sub-accounts.\n\nOperation Level: 1 (Read)\n\nUse when the user says: \"check my balance\", \"how much do I have\".",
   "inputSchema": {
     "type": "object",
     "properties": {

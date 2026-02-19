@@ -540,17 +540,17 @@ def get_balance(account_id: str) -> dict:
 # ✅ GOOD: Structured response with context and navigation
 @tool
 def get_account_balances(include_details: bool = False) -> dict:
-    """Consulta saldos de todas las cuentas.
+    """Retrieve balances for all accounts.
 
-    Usar cuando el usuario pregunte:
-    - 'cuanto tengo?'
-    - 'mi saldo'
+    Use when the user says:
+    - 'check my balance'
+    - 'how much do I have'
     """
     return {
         "data": {"balance": 5000000, "currency": "PYG"},
-        "formatted": "Saldo disponible: Gs. 5.000.000",
+        "formatted": "Available balance: Gs. 5,000,000",
         "available_actions": ["get_transactions", "transfer_funds"],
-        "message_for_user": "Tu saldo es Gs. 5.000.000"
+        "message_for_user": "Your balance is Gs. 5,000,000"
     }
 ```
 
