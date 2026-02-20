@@ -16,6 +16,7 @@ Scaffolds the project with dependencies, agent code, prompts, tools, and a chat 
 
 ```
 /design-topology       → Define agent architecture (if multi-agent)
+/add-subagent          → Add a subagent to an existing architecture
 /design-tools          → Create AI-friendly tool catalog
 /add-interactive-chat  → Test the agent manually
 /design-evals          → Create eval scenarios from JTBD (start early)
@@ -71,6 +72,7 @@ As the agent grows, assess its architecture and evolve it:
 # After refactoring
 /eval                               → Verify no regressions
 /tool-status                        → Check tool quality scores
+/add-subagent                       → Add "dispute-specialist" subagent
 /add-tool                           → Add new "dispute_transaction" tool
 /add-scenario                       → Create eval scenario for the new tool
 /eval --smoke                       → Quick smoke test
@@ -81,7 +83,7 @@ As the agent grows, assess its architecture and evolve it:
 | Skill | Description | Key Commands |
 |-------|-------------|--------------|
 | **quickstart** | Getting started with DeepAgents | `/new-sdk-app` |
-| **architecture** | Agent topologies and bounded contexts | `/design-topology` |
+| **architecture** | Agent topologies and bounded contexts | `/design-topology`, `/add-subagent` |
 | **patterns** | System prompts, tool design, anti-patterns | — |
 | **tool-design** | AI-friendly tool design (10 principles) | `/design-tools`, `/add-tool`, `/tool-status` |
 | **evals** | Evals-Driven Development workflow | `/design-evals`, `/eval`, `/add-scenario`, `/eval-status`, `/eval-update` |
@@ -106,6 +108,7 @@ As the agent grows, assess its architecture and evolve it:
 |---------|-------------|
 | `/new-sdk-app` | Scaffold a new DeepAgents project |
 | `/design-topology` | Interactive guide to design agent topology |
+| `/add-subagent` | Add a single subagent to an existing architecture |
 | `/design-tools` | Design a complete AI-friendly tool catalog |
 | `/add-tool` | Add a single tool to an existing catalog |
 | `/add-interactive-chat` | Generate an interactive chat console |
