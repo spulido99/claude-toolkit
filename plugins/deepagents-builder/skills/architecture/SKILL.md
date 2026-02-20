@@ -426,6 +426,8 @@ Before finalizing architecture:
 - [ ] Distinct vocabularies per context
 - [ ] Appropriate cognitive load (3-10 tools per agent)
 - [ ] Stakeholders recognize the structure
+- [ ] New subagent description tested for routing ambiguity against all existing descriptions
+- [ ] Eval scenarios planned for new subagent capabilities (`/add-scenario`)
 
 ## Additional Resources
 
@@ -441,4 +443,13 @@ For detailed patterns and implementation guidance:
 
 ### Commands
 
-Use `/design-topology` for interactive architecture design.
+| Command | Purpose |
+|---------|---------|
+| `/design-topology` | Interactive full architecture design from scratch |
+| `/add-subagent` | Add a single subagent to an existing architecture (incremental) |
+| `/add-tool` | Add a single tool to an existing catalog |
+| `/validate-agent` | Full architecture scan for anti-patterns |
+| `/evolve` | Guided architecture evolution and refactoring |
+| `/assess` | Assess agent maturity level |
+
+**Incremental subagent workflow**: Use `/add-subagent` when you already have a running agent and want to expand it with a new capability. It analyzes the existing topology, designs a new subagent matching your conventions, checks for routing ambiguity, and inserts the code — without redesigning the full architecture.

@@ -132,3 +132,61 @@ Provide architecture recommendations as:
 - **Context Isolation**: Each subagent should have clear bounded context
 - **Security-First**: Use ToolRuntime for sensitive data, interrupt_on for destructive ops
 - **Plan for Evolution**: Design for easy refactoring
+
+## Phase 8: Single Subagent Addition (Incremental Mode)
+
+Used by `/add-subagent` — add one subagent to an existing architecture without redesigning the whole topology.
+
+### Step 8.1: Ingest Architecture Profile
+
+Receive the parsed architecture profile from the command (do not re-read files). This includes:
+- Current subagent list (names, descriptions, tool counts)
+- Detected topology pattern
+- Naming convention and prompt style
+- New capability requirements from user
+
+### Step 8.2: Design Subagent Dict
+
+Produce a complete subagent dict following these rules:
+
+- **Name**: kebab-case, match existing suffix pattern (e.g., `-specialist`, `-platform`), must be unique across all subagents
+- **Description**: written for routing — use a verb phrase with discriminating triggers, no overlap with existing descriptions. Include explicit exclusions if needed (e.g., "Does NOT handle billing disputes")
+- **System Prompt**: mirror the exact section structure of existing subagents. Standard sections:
+  - **Role**: one-sentence identity
+  - **Context & Vocabulary**: domain terms this subagent owns
+  - **Workflow**: step-by-step instructions
+  - **When to Escalate**: explicit conditions for returning to orchestrator
+- **Tools**: only tools required for this capability, cross-check for shared tool assignments
+- **Model**: only override if justified (cheaper model for simple tasks, more capable for complex reasoning)
+
+### Step 8.3: Routing Impact Analysis
+
+For each existing subagent, check if any user request could plausibly route to both the new and existing subagent. Present results as a table:
+
+```
+| Request Example            | Routes To         | Conflict? |
+|----------------------------|-------------------|-----------|
+| "Check order status"       | orders-specialist | No        |
+| "Handle customer refund"   | billing / support | YES       |
+```
+
+If conflicts found, fix by refining descriptions with explicit exclusions until no ambiguity remains.
+
+### Step 8.4: Cognitive Load Check
+
+Verify each subagent (including the new one) has 3-10 tools:
+
+- **< 3 tools**: warn — consider merging into another subagent (One-Time Subagent anti-pattern)
+- **3-10 tools**: optimal range
+- **> 10 tools**: suggest splitting into two subagents
+
+### Step 8.5: Produce Final Specification
+
+Output the complete specification for user approval:
+
+1. **Subagent dict** — ready to paste into `subagents=[]`
+2. **Routing table** — all subagents with descriptions and example triggers
+3. **Cognitive load summary** — tool counts per subagent
+4. **Anti-pattern check results** — pass/warn/error for each check
+
+Wait for explicit user approval before the command proceeds to code generation.
