@@ -15,6 +15,7 @@ The plugin follows an **Evals-Driven Development (EDD)** workflow: define what s
 Scaffolds the project with dependencies, agent code, prompts, tools, and a chat console. After scaffolding, follow the suggested EDD workflow:
 
 ```
+/design-agent          → Design a simple single agent (role, tools, prompt)
 /design-topology       → Define agent architecture (if multi-agent)
 /add-subagent          → Add a subagent to an existing architecture
 /design-tools          → Create AI-friendly tool catalog
@@ -82,7 +83,7 @@ As the agent grows, assess its architecture and evolve it:
 
 | Skill | Description | Key Commands |
 |-------|-------------|--------------|
-| **quickstart** | Getting started with DeepAgents | `/new-sdk-app` |
+| **quickstart** | Getting started with DeepAgents | `/new-sdk-app`, `/design-agent` |
 | **architecture** | Agent topologies and bounded contexts | `/design-topology`, `/add-subagent` |
 | **patterns** | System prompts, tool design, anti-patterns | — |
 | **tool-design** | AI-friendly tool design (10 principles) | `/design-tools`, `/add-tool`, `/tool-status` |
@@ -107,6 +108,7 @@ As the agent grows, assess its architecture and evolve it:
 | Command | Description |
 |---------|-------------|
 | `/new-sdk-app` | Scaffold a new DeepAgents project |
+| `/design-agent` | Design a simple single agent (role, tools, prompt, model) |
 | `/design-topology` | Interactive guide to design agent topology |
 | `/add-subagent` | Add a single subagent to an existing architecture |
 | `/design-tools` | Design a complete AI-friendly tool catalog |

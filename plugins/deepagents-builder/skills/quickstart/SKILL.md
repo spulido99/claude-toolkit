@@ -291,6 +291,7 @@ After basic setup, explore:
 
 **Build**:
 - `/new-sdk-app` — Scaffold a new DeepAgents project
+- `/design-agent` — Design a simple single agent (role, tools, prompt)
 - `/design-topology` — Design optimal agent topology
 - `/design-tools` — Design AI-friendly tool catalog
 - `/add-interactive-chat` — Generate interactive chat console
