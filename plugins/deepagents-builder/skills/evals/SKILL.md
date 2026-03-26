@@ -64,7 +64,7 @@ The narrative converts to a structured format the eval system can execute:
         - approval: approve
         - expected_tools: []
       success_criteria:
-        - response_contains: ["address updated", "123 Main St"]
+        - judge_criteria: "Agent confirmed the address was updated to 123 Main St"
         - max_turns: 5
 
     - name: order_not_found
@@ -77,16 +77,67 @@ The narrative converts to a structured format the eval system can execute:
               error: "not_found"
               message: "No order found with ID #9999"
       success_criteria:
-        - response_contains: ["not found", "order number"]
+        - judge_criteria: "Agent informed user the order was not found and asked for alternative information"
         - no_tools: [update_order]
+
+    - name: change_address_mid_conversation
+      tags: [e2e]
+      history:
+        - role: user
+          content: "Where is my order #1234?"
+        - role: assistant
+          content: "Your order #1234 is shipped. Tracking: 1Z999AA. ETA: Feb 21."
+      turns:
+        - user: "Change the delivery to 789 Elm St"
+        - expected_tools: [update_order]
+          mock_responses:
+            update_order:
+              status: "pending_confirmation"
+              changes: { address: "789 Elm St" }
+          interrupt: true
+        - approval: approve
+      success_criteria:
+        - judge_criteria: "Agent confirmed the delivery address change"
 ```
 
 **Key fields**:
+- `history`: Prior conversation turns that establish context. Required when the user's first message in `turns` responds to prior agent output (e.g., "Si dale", "Actually, can you change..."). The eval runner pre-loads these before executing the scenario.
 - `mock_responses`: Tool return values for Tier 1 scripted tests — the eval runner intercepts tool calls and returns these instead of calling real services. If the agent calls a tool not in `expected_tools`, the test fails immediately (contract test).
 - `approval`: Handles `interrupt_on` HITL flows — the eval runner auto-responds with `approve` or `reject` when the agent pauses for human decision. Test both paths. (Cross-ref: [Patterns — interrupt_on](../patterns/SKILL.md))
+- `judge_criteria`: Semantic content assertion (default for response checks). Uses a cheap LLM to evaluate whether the agent's response satisfies the stated criteria. Preferred over `response_contains` because agents rephrase everything.
 - `tags`: Organize scenarios for selective runs (`@smoke`, `@e2e`, `@edge_case`, `@error_handling`, `@multi_agent`).
 
 See [`references/01-scenarios.md`](references/01-scenarios.md) for full templates, E2E examples, and anti-patterns.
+
+## Agent Eval vs Unit Test: Which Do You Need?
+
+Before writing a scenario, determine whether you need an agent eval or a unit test:
+
+| Signal | Agent Eval | Unit Test |
+|--------|-----------|-----------|
+| Tests tool selection (which tool?) | Yes | No |
+| Tests conversation flow (multi-turn) | Yes | No |
+| Tests input validation logic | No | Yes |
+| Tests data transformation | No | Yes |
+| Tests API error handling in tool code | No | Yes |
+| Tests routing to correct subagent | Yes | No |
+| Tests prompt adherence | Yes | No |
+| Tests business logic in tool implementation | No | Yes |
+
+```
+Does the test require an LLM to make a decision?
+  ├── Yes → Agent eval (YAML scenario)
+  │   "Agent should call lookup_order when user asks about their order"
+  │   "Agent should escalate when refund exceeds $100"
+  │   "Agent should ask for clarification when order ID is missing"
+  │
+  └── No → Unit test (pytest, standard assertions)
+      "lookup_order returns 404 when order doesn't exist"
+      "validate_email rejects malformed addresses"
+      "process_refund calculates correct prorated amount"
+```
+
+**Common mistake**: Writing agent evals for input validation. If the logic can be tested by calling a function directly, it's a unit test, not an agent eval.
 
 ## Step 2: Build Your Dataset
 
@@ -397,6 +448,10 @@ Three levels — choose how deep to go:
 
 See [`references/03-dev-workflow.md`](references/03-dev-workflow.md) for snapshot setup, cost management, production trace mining, and debugging with LangSmith.
 
+See [`references/04-mock-strategies.md`](references/04-mock-strategies.md) for mocking strategies including multi-agent API-client-level mocking.
+
+See [`references/05-security-evals.md`](references/05-security-evals.md) for dual-layer security assertion patterns (prompt injection, data leakage, access control).
+
 ## Step 5: Iterate and Expand
 
 ### When to Add Scenarios
@@ -448,6 +503,10 @@ Manually curate interesting production conversations into eval scenarios:
 
 | Question | Evaluator |
 |----------|-----------|
+| Does the response convey the right meaning? | `judge_criteria` (semantic, cheap LLM) |
+| Does the response contain exact values (IDs, URLs)? | `response_contains` (deterministic) |
+| Does the response avoid exact forbidden terms? | `not_contains` (deterministic) |
+| Does the response avoid forbidden concepts (paraphrases)? | `security_judge_criteria` (semantic) |
 | Did the agent call the right tools in the right order? | Trajectory match (strict) |
 | Did it call the right tools in any order? | Trajectory match (unordered) |
 | Did it call certain tools among others? | Trajectory match (subsequence) |
@@ -462,6 +521,10 @@ Manually curate interesting production conversations into eval scenarios:
 
 - [ ] Define 2-3 JTBD for your agent's users
 - [ ] Write happy path + edge case + failure scenarios per JTBD
+- [ ] Use `judge_criteria` for semantic assertions (not `response_contains` for phrases)
+- [ ] Use `response_contains` only for exact values (IDs, URLs, reference numbers)
+- [ ] Add `history` for scenarios that depend on prior conversation context
+- [ ] Verify each scenario is an agent eval, not a unit test
 - [ ] Add `mock_responses` for all expected tool calls
 - [ ] Add `approval` steps for `interrupt_on` flows
 - [ ] Run `/eval` to generate initial snapshots

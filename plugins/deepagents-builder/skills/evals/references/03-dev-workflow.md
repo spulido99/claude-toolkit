@@ -478,34 +478,36 @@ Local traces use the same message format as snapshots:
 
 ## Mocking Strategies
 
-### External Service Mocks
+See [`references/04-mock-strategies.md`](04-mock-strategies.md) for the complete mocking guide, including:
 
-Use `unittest.mock.patch` for services not covered by `mock_responses` in scenario YAML:
-
-```python
-from unittest.mock import patch
-
-def test_with_mocked_api(agent):
-    """Test with mocked external API."""
-    with patch('tavily.TavilyClient.search') as mock_search:
-        mock_search.return_value = {"results": [
-            {"title": "Result 1", "content": "..."},
-        ]}
-
-        result = agent.invoke({
-            "messages": [{"role": "user", "content": "Search for AI trends"}]
-        })
-
-        mock_search.assert_called_once()
-```
-
-### When to Use Each Mocking Strategy
+- **Tool-level mocks** (`mock_responses` in YAML) — default for single-agent
+- **API-client-level mocks** (`unittest.mock.patch`) — for supervisor/subagent architectures
+- **External SDK mocks** — for Tavily, Stripe, and other third-party integrations
+- **Advanced patterns** — `_raise` directive, per-turn mocks, route-aware mocking
 
 | Strategy | When to use |
 |----------|-------------|
 | `mock_responses` in YAML | Default. For tools defined in the agent. |
-| `unittest.mock.patch` | For external SDKs/APIs not in the agent's tool list. |
+| `unittest.mock.patch` (API client) | For supervisor/subagent architectures. |
+| `unittest.mock.patch` (SDK) | For external SDKs/APIs not in the agent's tool list. |
 | Real services | Only for integration tests with dedicated test accounts. |
+
+## Parallel Test Execution
+
+For large eval suites (50+ scenarios), use `pytest-xdist` for parallelism:
+
+```bash
+# Run evals across 4 workers
+pytest evals/ -n 4
+
+# Auto-detect number of CPUs
+pytest evals/ -n auto
+
+# Combine with smoke tag
+pytest evals/ -m smoke -n auto
+```
+
+Each worker needs its own agent instance. The `conftest.py` fixture creates a fresh agent per test, so this works out of the box. Install with `pip install pytest-xdist`.
 
 ## Debugging with LangSmith
 
@@ -538,6 +540,22 @@ os.environ["LANGSMITH_EXPERIMENT"] = "prompt-v2"
 
 # Compare in LangSmith dashboard: side-by-side metrics
 ```
+
+## Alternative: Phoenix + OpenTelemetry
+
+If you prefer open-source observability, use [Phoenix](https://github.com/Arize-AI/phoenix) with OpenTelemetry for tracing:
+
+```python
+import phoenix as px
+from openinference.instrumentation.langchain import LangChainInstrumentor
+
+px.launch_app()
+LangChainInstrumentor().instrument()
+
+# Run evals — traces appear in Phoenix UI at localhost:6006
+```
+
+Phoenix provides similar capabilities to LangSmith (trace visualization, experiment comparison) without requiring a LangSmith account. Install with `pip install arize-phoenix openinference-instrumentation-langchain`.
 
 ## Refactoring Regression Workflow
 
