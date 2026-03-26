@@ -98,6 +98,13 @@ Guide the user through defining what their agent's users want to accomplish:
 2. For each job, ask: "Walk me through the ideal flow. What does the user say? What should the agent do?"
 3. For each job, prompt for edge cases: "What could go wrong? What unusual inputs might the user provide?"
 4. If agent code exists, read tools and prompts to suggest additional scenarios the user may not have thought of.
+5. For each scenario the user describes, classify whether it's an agent eval or a unit test:
+   - **Agent eval**: Requires LLM decision-making (tool selection, conversation flow, routing)
+   - **Unit test**: Tests deterministic logic (input validation, data transformation, error codes)
+
+   If the user describes a unit test scenario, advise them: "This scenario tests [input validation / data transformation / etc.] which doesn't require the agent to make decisions. I recommend writing this as a standard pytest unit test against the tool function directly, rather than an agent eval. Would you like help with that instead?"
+
+   Only generate YAML scenarios for true agent evals.
 
 Keep it conversational — the user doesn't need to know JTBD framework theory.
 
@@ -113,7 +120,18 @@ If agent code exists, use tool names for `expected_tools` and generate appropria
 Include:
 - `mock_responses` for all `expected_tools` (so Tier 1 scripted tests can run)
 - `approval` steps for tools with `interrupt_on` or `pending_confirmation` patterns
-- `success_criteria` with `response_contains`, `max_turns`, `no_tools` as appropriate
+- `history` when the scenario's first user message references prior context. Generate history if:
+  - The user message starts with "Actually...", "Can you also...", "Yes", "No", or implies a prior exchange
+  - The scenario tests mid-conversation behavior
+  - The agent needs context from a previous tool call to know which tool to use
+  - **Rule**: If the user's first `turns` message would be ambiguous to a fresh agent, add `history`
+- `success_criteria` using the correct assertion type:
+  - **Default to `judge_criteria`** for all semantic checks (what the agent should communicate). Example: `judge_criteria: "Agent confirmed the refund and provided a reference number"`
+  - Use `response_contains` **ONLY** for exact values that cannot be rephrased: IDs, reference numbers, tracking codes, URLs, specific amounts. Example: `response_contains: ["REF-ABC123"]`
+  - Use `not_contains` for exact terms that must be absent (security)
+  - Use `security_judge_criteria` for semantic security assertions
+  - Use `max_turns`, `no_tools`, `signal_task_complete` as appropriate
+  - **CRITICAL**: Never generate `response_contains` for phrases the agent might rephrase. "shipped", "not found", "address updated" are all rephrased by agents. Only use it for literal values like "REF-ABC123" or "1Z999AA10123456784".
 - Tags for selective runs
 
 ### Step 5: Write Dataset
@@ -141,6 +159,9 @@ For `/add-scenario` (incremental mode):
   scenarios:
     - name: [snake_case_name]
       tags: [tag1, tag2]
+      history:  # Optional: prior conversation context
+        - role: assistant
+          content: "[Prior agent message that sets up context]"
       turns:
         - user: "[User message]"
         - expected_tools: [tool_name]
@@ -149,7 +170,8 @@ For `/add-scenario` (incremental mode):
               key: value
         - approval: approve  # For interrupt_on flows
       success_criteria:
-        - response_contains: ["phrase1", "phrase2"]
+        - judge_criteria: "Agent confirmed [expected outcome]"
+        - response_contains: ["EXACT-ID-123"]  # Only for exact values
         - max_turns: N
         - no_tools: [forbidden_tool]
 ```
@@ -169,6 +191,9 @@ def agent():
 
 - **JTBD-first**: Every scenario traces back to a real user goal
 - **Progressive**: Start narrative, convert to structured YAML when ready
+- **Semantic assertions by default**: Use `judge_criteria` for all content checks. Reserve `response_contains` for exact values (IDs, URLs, reference numbers). Agents reformulate everything — literal assertions break.
+- **History for context**: Generate `history` when user messages reference prior conversation. Without it, the agent can't know which tool to call.
+- **Agent evals only**: Classify scenarios and redirect unit tests to standard pytest. Input validation, data transformation, and tool-internal logic are unit tests, not agent evals.
 - **Complete mocks**: Every `expected_tools` entry has a corresponding `mock_responses` so Tier 1 runs without external services
 - **Both approval paths**: For `interrupt_on` flows, generate both approve and reject scenarios
 - **Diversity**: Vary user phrasing to test tool selection robustness

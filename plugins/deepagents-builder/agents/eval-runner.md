@@ -68,6 +68,17 @@ snapshot:
 
 Execute based on the mode (passed as command argument):
 
+When a scenario has a `history` field, pre-load these messages into the agent's conversation state before executing the `turns`:
+
+```python
+if scenario.get("history"):
+    for msg in scenario["history"]:
+        agent.invoke(
+            {"messages": [{"role": msg["role"], "content": msg["content"]}]},
+            config={"configurable": {"thread_id": thread_id}},
+        )
+```
+
 **Snapshot mode (default)**: Run scenarios with scripted turns. Compare trajectory against `evals/__snapshots__/`. No LLM judge needed.
 
 ```bash
@@ -86,14 +97,20 @@ pytest evals/ -m smoke -v
 pytest evals/ --full --judge-model openai:o3-mini
 ```
 
-### Step 4: Compare Trajectories
+### Step 4: Compare Trajectories and Evaluate Assertions
 
 For each scenario, compare actual trajectory against stored snapshot:
 
 1. Load snapshot from `evals/__snapshots__/{scenario_name}.json`
 2. If no snapshot exists: first run — save trajectory as new snapshot
 3. If snapshot exists: compare using configured `compare_mode`
-4. Classify result: **passed** (matches), **failed** (diverged), **changed** (different but ambiguous)
+4. Evaluate `success_criteria` assertions:
+   - `judge_criteria`: Invoke LLM judge (model from `eval-config.yaml`) to evaluate whether the agent's response satisfies the semantic criteria. Use `temperature=0`.
+   - `response_contains`: Check for exact string matches in the final response
+   - `not_contains`: Check that exact forbidden terms are absent
+   - `security_judge_criteria`: Invoke LLM judge with security-focused prompt for semantic forbidden concept check
+   - `max_turns`, `no_tools`, `signal_task_complete`: Deterministic checks
+5. Classify result: **passed** (matches), **failed** (diverged), **changed** (different but ambiguous)
 
 ### Step 5: Write Results
 
