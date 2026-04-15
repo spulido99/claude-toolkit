@@ -1,0 +1,7 @@
+{
+  "name": "dev-patterns",
+  "version": "1.0.0",
+  "description": "Cross-cutting development patterns and gotchas for common tech stacks. Starts with AWS CDK; designed to grow with additional reference skills (dynamodb-design, expo-react-native).",
+  "author": { "name": "spuli" },
+  "keywords": ["patterns", "aws", "cdk", "infrastructure", "reference"]
+}

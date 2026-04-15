@@ -35,6 +35,15 @@
       "author": {
         "name": "spuli"
       }
+    },
+    {
+      "name": "dev-patterns",
+      "source": "./plugins/dev-patterns",
+      "description": "Cross-cutting development patterns and gotchas for common tech stacks. Starts with AWS CDK; designed to grow with additional reference skills.",
+      "version": "1.0.0",
+      "author": {
+        "name": "spuli"
+      }
     }
   ]
 }
