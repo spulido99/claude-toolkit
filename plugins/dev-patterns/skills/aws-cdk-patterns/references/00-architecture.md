@@ -10,8 +10,8 @@
 2. **Hexagonal architecture for Lambda functions** — Handlers, services, ports, adapters; dependency injection; test strategy per layer.
 3. **DDD module structure** — One bounded context per module; directory layout; decision tree for new Lambda vs. new module.
 4. **Two-stack architecture (backend + frontend)** — Backend exports, frontend consumes via `config.json`; when stateful/stateless split actually applies.
-5. **Shared infrastructure constructs** — Cognito, API Gateway, Lambda layer, audit log, event bus, monitoring; injection pattern.
-6. **Cross-module communication patterns** — IAM-authenticated REST, read-only grants, shared kernel types, event bus.
+5. **Shared infrastructure constructs** — Cognito, API Gateway, Lambda layer, audit log, event bus, monitoring; `SharedInfra` type and the main-stack injection pattern that wires them into every module.
+6. **Cross-module communication patterns** — IAM-authenticated REST, read-only table grants, shared kernel types for cross-domain values, and EventBridge for loose-coupling domain events.
 
 ## Section 1: When to apply this architecture
 
@@ -104,6 +104,8 @@ const service = new OrderService();
 export const handler: APIGatewayProxyHandler = withCors(async (event) => {
   const parsed = parseBody(event.body, CreateOrderSchema);
   if (!parsed.success) {
+    // `event` is passed so createResponse can echo the request's Origin header
+    // back in Access-Control-Allow-Origin (see 05-shared-utilities.md).
     return createResponse(400, { success: false, error: parsed.error }, event);
   }
   const userId = event.requestContext.authorizer?.claims?.sub as string;
@@ -149,9 +151,13 @@ The CDK construct in `infra/{domain}.module.ts` owns the module's tables, Lambda
 Sketch:
 
 ```typescript
+import * as path from "path";
 import { Construct } from "constructs";
-import { Table } from "aws-cdk-lib/aws-dynamodb";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import * as cdk from "aws-cdk-lib";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as nodejs from "aws-cdk-lib/aws-lambda-nodejs";
+import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import { SharedInfra } from "../../../shared/infra/types";
 
 export interface OrdersModuleProps {
@@ -160,13 +166,60 @@ export interface OrdersModuleProps {
 }
 
 export class OrdersModule extends Construct {
-  public readonly ordersTable: Table;
+  public readonly ordersTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props: OrdersModuleProps) {
     super(scope, id);
-    // Define this module's table, lambdas, routes, and permissions here.
-    // Wire API Gateway routes off props.shared.api, Cognito authorizer off props.shared.cognito, etc.
+
+    this.ordersTable = new dynamodb.Table(this, "OrdersTable", {
+      partitionKey: { name: "pk", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "sk", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy:
+        props.stage === "prod"
+          ? cdk.RemovalPolicy.RETAIN
+          : cdk.RemovalPolicy.DESTROY,
+    });
+
+    const listOrdersFn = new nodejs.NodejsFunction(this, "ListOrdersFn", {
+      entry: path.join(__dirname, "../src/handlers/list-orders.handler.ts"),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      layers: [props.shared.layer.layer],
+      environment: {
+        ORDERS_TABLE: this.ordersTable.tableName,
+      },
+    });
+    this.ordersTable.grantReadData(listOrdersFn);
+
+    props.shared.api.root
+      .addResource("orders")
+      .addMethod("GET", new apigateway.LambdaIntegration(listOrdersFn), {
+        authorizer: props.shared.cognito.authorizer,
+      });
+
+    // Additional handlers, routes, and grants follow the same pattern.
   }
+}
+```
+
+The `SharedInfra` type captures exactly which constructs the main stack injects, giving each module a typed surface to work from:
+
+```typescript
+// shared/infra/types.ts
+import { CognitoConstruct } from "./cognito.construct";
+import { ApiGatewayConstruct } from "./api-gateway.construct";
+import { LambdaLayerConstruct } from "./lambda-layer.construct";
+import { AuditLogConstruct } from "./audit-log.construct";
+import { EventBusConstruct } from "./event-bus.construct";
+import { MonitoringConstruct } from "./monitoring.construct";
+
+export interface SharedInfra {
+  cognito: CognitoConstruct;
+  api: ApiGatewayConstruct;
+  layer: LambdaLayerConstruct;
+  audit: AuditLogConstruct;
+  eventBus: EventBusConstruct;
+  monitoring: MonitoringConstruct;
 }
 ```
 
@@ -271,18 +324,22 @@ export class BackendStack extends Stack {
   constructor(scope: Construct, id: string, props: StackProps) {
     super(scope, id, props);
 
+    // `stage` should come from CDK context (`this.node.tryGetContext('stage')`)
+    // or from StackProps so the same stack class can deploy to dev/staging/prod.
+    const stage = "dev";
+
     const shared = {
-      cognito: new CognitoConstruct(this, "Cognito", { stage: "dev" }),
-      api: new ApiGatewayConstruct(this, "Api", { stage: "dev" }),
+      cognito: new CognitoConstruct(this, "Cognito", { stage }),
+      api: new ApiGatewayConstruct(this, "Api", { stage }),
       layer: new LambdaLayerConstruct(this, "Layer"),
       audit: new AuditLogConstruct(this, "Audit"),
       eventBus: new EventBusConstruct(this, "Events"),
       monitoring: new MonitoringConstruct(this, "Monitoring"),
     };
 
-    new OrdersModule(this, "Orders", { shared, stage: "dev" });
-    new UsersModule(this, "Users", { shared, stage: "dev" });
-    new InventoryModule(this, "Inventory", { shared, stage: "dev" });
+    new OrdersModule(this, "Orders", { shared, stage });
+    new UsersModule(this, "Users", { shared, stage });
+    new InventoryModule(this, "Inventory", { shared, stage });
   }
 }
 ```
@@ -304,10 +361,7 @@ This pattern preserves bounded context boundaries. Module A does not know module
 For tightly coupled cross-cutting reads where the REST round-trip is prohibitively expensive or the data is fundamentally shared (configuration tables, lookup tables), grant read-only access to the other module's table directly.
 
 ```typescript
-// In the module that exposes the table:
-props.shared.crossModuleGrants.grantReadOnOrdersTable(someOtherModuleFunction);
-
-// Or directly, inside the main stack:
+// Inside the main stack, where both modules are in scope:
 ordersModule.ordersTable.grantReadData(inventoryReconciliationFunction);
 ```
 
@@ -332,6 +386,8 @@ If a type currently lives in `modules/orders/src/types.ts` and module `inventory
 Modules publish domain events (`OrderCreated`, `UserRegistered`, `InventoryAdjusted`) to the shared EventBridge bus without knowing who consumes them. EventBridge rules, defined either in the main stack or in the consumer module's infra, route events to interested Lambdas.
 
 ```typescript
+// (illustrative — split across producer runtime code and consumer infra, not one file)
+
 // Producer: module A emits an event it cares about, nothing more.
 await this.eventPort.emitOrderCreated(order);
 
@@ -351,7 +407,7 @@ This pattern is the loose-coupling workhorse. Adding a new consumer for `OrderCr
 
 ## Further reading
 
-- AWS CDK v2 API reference: `https://docs.aws.amazon.com/cdk/api/v2/`
+- [AWS CDK v2 API reference](https://docs.aws.amazon.com/cdk/api/v2/)
 - `01-serverless-api.md` — Lambda + DynamoDB + API Gateway inside the hexagonal pattern.
 - `05-shared-utilities.md` — `validateEnv`, `parseBody`, `createResponse`, `withCors`, `ApiResponse<T>`, `ErrorCodes`, secrets loading.
 - `06-deploy-workflow.md` — Pre-deploy checklist, stage and suffix system, rollback basics.
