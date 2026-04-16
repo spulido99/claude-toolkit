@@ -1,0 +1,9 @@
+Estoy empezando un proyecto CDK nuevo para un backend serverless. Cómo organizo el código de mis Lambdas?
+Estoy haciendo un CDK stack con Lambda + DynamoDB. Cómo defino los LogGroups?
+Mi Cognito con Google federated identity tira "Identity provider does not exist". Qué hago?
+Quiero garantizar unicidad de email en DynamoDB. Cómo lo hago sin race conditions?
+Cómo parseo el body de un request Lambda de forma segura?
+Starting a new CDK project with several domain modules. How should I structure it?
+Setting up an S3 + CloudFront static site and getting "Access denied from bucket policy" — what's wrong?
+Preparing a cdk deploy to prod. Give me the pre-deploy checklist.
+I want to separate my CDK stack into stateful and stateless. How should I split resources?
