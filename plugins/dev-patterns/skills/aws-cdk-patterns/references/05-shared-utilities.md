@@ -70,6 +70,7 @@ import { z } from "zod";
 import type { APIGatewayProxyEvent } from "aws-lambda";
 import { parseBody } from "shared/utils/parse-body";
 import { createResponse } from "shared/utils/cors";
+import { ErrorCodes } from "shared/types/api-responses";
 
 const CreateOrderSchema = z.object({
   productId: z.string().uuid(),
@@ -79,7 +80,11 @@ const CreateOrderSchema = z.object({
 export const handler = async (event: APIGatewayProxyEvent) => {
   const parsed = parseBody(event.body, CreateOrderSchema);
   if (!parsed.success) {
-    return createResponse(400, { success: false, error: parsed.error }, event);
+    return createResponse(
+      400,
+      { success: false, error: { code: ErrorCodes.INVALID_INPUT, message: parsed.error } },
+      event,
+    );
   }
   // parsed.data is typed as { productId: string; quantity: number }
   // ... call service with parsed.data
@@ -92,16 +97,14 @@ export const handler = async (event: APIGatewayProxyEvent) => {
 
 `createResponse` produces a well-formed API Gateway response with CORS, security headers, and a unique request ID. `withCors` is a higher-order wrapper that guarantees CORS is applied even on exception paths and supplies a consistent 500 response for uncaught errors.
 
+`cors.ts` does not redefine `ApiResponse<T>` — it imports the canonical type from `shared/types/api-responses.ts` (Section 4). This keeps a single source of truth for the response shape across the codebase.
+
 ```typescript
 // shared/utils/cors.ts
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { randomUUID } from "crypto";
-
-export interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-}
+import type { ApiResponse } from "shared/types/api-responses";
+import { ErrorCodes } from "shared/types/api-responses";
 
 const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
@@ -159,7 +162,11 @@ export function withCors(
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : "Internal error";
-      return createResponse(500, { success: false, error: message }, event);
+      return createResponse(
+        500,
+        { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message } },
+        event,
+      );
     }
   };
 }
@@ -192,12 +199,15 @@ export const ErrorCodes = {
   UNAUTHORIZED: "UNAUTHORIZED",
   FORBIDDEN: "FORBIDDEN",
   TOKEN_EXPIRED: "TOKEN_EXPIRED",
+  SESSION_EXPIRED: "SESSION_EXPIRED",
   INVALID_OTP: "INVALID_OTP",
 
   // Input validation
   INVALID_INPUT: "INVALID_INPUT",
   MISSING_REQUIRED_FIELD: "MISSING_REQUIRED_FIELD",
   INVALID_MIME_TYPE: "INVALID_MIME_TYPE",
+  INVALID_FORMAT: "INVALID_FORMAT",
+  PAYLOAD_TOO_LARGE: "PAYLOAD_TOO_LARGE",
 
   // Resources
   NOT_FOUND: "NOT_FOUND",
@@ -206,15 +216,18 @@ export const ErrorCodes = {
 
   // Rate limiting
   RATE_LIMIT_EXCEEDED: "RATE_LIMIT_EXCEEDED",
+  QUOTA_EXCEEDED: "QUOTA_EXCEEDED",
 
   // Server
   INTERNAL_ERROR: "INTERNAL_ERROR",
   SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
   DEPENDENCY_FAILURE: "DEPENDENCY_FAILURE",
+  METHOD_NOT_ALLOWED: "METHOD_NOT_ALLOWED",
 
   // Business logic
   INSUFFICIENT_FUNDS: "INSUFFICIENT_FUNDS",
   OPERATION_NOT_ALLOWED: "OPERATION_NOT_ALLOWED",
+  UNSUPPORTED_OPERATION: "UNSUPPORTED_OPERATION",
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
