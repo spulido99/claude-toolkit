@@ -1,0 +1,30 @@
+# Local Claude Code configuration (per-machine permissions and settings)
+.claude/settings.local.json
+
+# Local work-in-progress todos (not shared)
+todos/
+
+# Nested repositories (separate git repos living inside this workspace)
+CFOaaS/
+
+# Dependencies
+node_modules/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment files (defensive — no secrets in git)
+.env
+.env.local
+.env.*.local
