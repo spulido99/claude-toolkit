@@ -17,10 +17,25 @@ This plugin is part of the `claude-skills` marketplace. Install via Claude Code 
 
 ## Testing the skill
 
-Run the test harness to validate skill retrieval and application:
+Run the test harness to validate skill retrieval and application. Pick the variant for your shell:
+
+**Windows (PowerShell 7+):**
+
+```powershell
+.\plugins\dev-patterns\scripts\test-skill.ps1
+```
+
+**Mac / Linux / Git Bash:**
 
 ```bash
 ./plugins/dev-patterns/scripts/test-skill.sh
 ```
 
-The script runs RED (baseline without skill) and GREEN (with skill loaded) phases for every scenario in `tests/scenarios.txt` and writes a diff for each scenario to a timestamped results directory. A human reviews the diffs against the success criteria in the design spec.
+Both variants run the same two phases for every scenario in `tests/scenarios.txt`:
+
+- **RED** — `claude -p --disable-slash-commands <prompt>` (baseline without any skill loaded)
+- **GREEN** — `claude -p --plugin-dir <plugin> --add-dir <plugin> --setting-sources project <prompt>` (dev-patterns loaded in isolation, reference files readable)
+
+Per-scenario outputs and unified diffs are written to a timestamped directory (`/tmp/aws-cdk-skill-test-<ts>/` on Unix, `$env:TEMP\aws-cdk-skill-test-<ts>\` on Windows). A human reviews the diffs against the success criteria in the design spec.
+
+**IMPORTANT:** Do not run these scripts from inside an active Claude Code session. `claude -p` spawned recursively from another Claude Code session deadlocks on interactive prompts. Use a plain terminal.
