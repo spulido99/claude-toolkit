@@ -62,8 +62,12 @@ for i in "${!SCENARIOS[@]}"; do
     > "$RESULTS_DIR/red/scenario-$idx.txt" 2>&1 || true
 
   echo "  GREEN phase..."
+  # --add-dir authorizes read access to the plugin's reference files.
+  # Without it, claude -p cannot read skills/*/references/*.md even
+  # though the plugin is loaded via --plugin-dir.
   claude -p \
     --plugin-dir "$PLUGIN_DIR" \
+    --add-dir "$PLUGIN_DIR" \
     --setting-sources project \
     "$prompt" \
     > "$RESULTS_DIR/green/scenario-$idx.txt" 2>&1 || true
