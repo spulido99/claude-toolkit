@@ -7,6 +7,7 @@ Personal marketplace of plugins, skills, and commands for Claude Code.
 | Plugin | Description | Components |
 |--------|-------------|------------|
 | **[deepagents-builder](plugins/deepagents-builder)** | Build AI agents with LangChain's DeepAgents | 6 skills, 14 commands, 6 agents |
+| **[dev-patterns](plugins/dev-patterns)** | Cross-cutting reference patterns for common tech stacks (AWS CDK + TypeScript) | 1 skill |
 | **[digital-marketing](plugins/digital-marketing)** | Digital marketing campaigns with Chrome automation | 1 skill |
 | **[linkedin-ai-voice](plugins/linkedin-ai-voice)** | LinkedIn AI thought leadership content | 1 skill |
 
@@ -20,6 +21,7 @@ Personal marketplace of plugins, skills, and commands for Claude Code.
 
 # Then install any plugin
 /plugin install deepagents-builder@spuli-plugins
+/plugin install dev-patterns@spuli-plugins
 /plugin install digital-marketing@spuli-plugins
 /plugin install linkedin-ai-voice@spuli-plugins
 ```
@@ -67,6 +69,15 @@ Build production-ready AI agents with LangChain's DeepAgents framework. Follows 
 **Commands (14):** Build (`/new-sdk-app`, `/design-topology`, `/design-tools`, `/add-tool`, `/add-interactive-chat`), Test (`/design-evals`, `/eval`, `/add-scenario`, `/eval-status`, `/eval-update`), Validate & Evolve (`/validate-agent`, `/tool-status`, `/assess`, `/evolve`)
 
 **Agents (6):** `agent-architect`, `code-reviewer`, `tool-architect`, `eval-designer`, `eval-runner`, `evolution-guide`
+
+### dev-patterns
+
+Reference patterns and gotchas for common tech stacks. Progressive disclosure: a lean `SKILL.md` routes Claude to detailed reference files loaded only when needed.
+
+**Skills (1):**
+- `aws-cdk-patterns` — Opinionated architecture for AWS CDK v2 in TypeScript. Hexagonal Lambdas inside DDD modules, two-stack backend/frontend split, construct patterns for serverless APIs, Cognito with Google federated identity, S3 + CloudFront SPA hosting, Aurora Serverless v2 (scale-to-zero) and DynamoDB access patterns (single-table vs multi-table, atomic uniqueness with `TransactWriteCommand`, identity-verified updates, cursor pagination), shared utilities (`parseBody`, `withCors`, `validateEnv`, secrets loading with cold-start cache), a deploy workflow (pre-deploy checklist, stage/suffix system, CloudFront domain registration), and a gotchas catalog.
+
+**Reference files (7):** `00-architecture`, `01-serverless-api`, `02-auth-stack`, `03-static-site`, `04-database`, `05-shared-utilities`, `06-deploy-workflow`
 
 ### digital-marketing
 
