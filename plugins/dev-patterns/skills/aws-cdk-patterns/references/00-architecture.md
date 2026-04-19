@@ -119,6 +119,7 @@ export const handler: APIGatewayProxyHandler = withCors(async (event) => {
 - **Service tests** — Mock ports by passing fake implementations into the constructor. Pure unit tests. No AWS credentials, no AWS SDK mocks, no network. Fastest and most numerous tests in the suite.
 - **Adapter tests** — Mock the AWS SDK clients directly using `@aws-sdk/client-mock` (or an equivalent). Verify that commands are constructed correctly and that results map to the domain types in `types.ts`.
 - **Handler tests** — Mock the service entirely. Verify event translation, input validation, CORS wrapping, and error mapping. Do not drive the real service from a handler test.
+- **Construct tests** — Synthesize the module's CDK construct into a CloudFormation template with `Template.fromStack(stack)` and assert on its shape using `aws-cdk-lib/assertions`. Catches infrastructure regressions (PITR dropped, log group missing, layer not attached, removal policy wrong) before they reach `cdk deploy`. Full example in Section 5.
 
 A symptom of broken decoupling is a service test that needs AWS credentials to run. See the Gotchas catalog below.
 
@@ -162,7 +163,11 @@ import { SharedInfra } from "../../../shared/infra/types";
 
 export interface OrdersModuleProps {
   shared: SharedInfra;
+  /** Coarse stage flag ("dev" | "staging" | "prod") used for isProd branching. */
   stage: string;
+  /** Unique per-deploy segment used in every resource name so concurrent
+   *  dev deploys do not collide. Matches the value built in BackendStack. */
+  stackSuffix: string;
 }
 
 export class OrdersModule extends Construct {
@@ -172,6 +177,7 @@ export class OrdersModule extends Construct {
     super(scope, id);
 
     this.ordersTable = new dynamodb.Table(this, "OrdersTable", {
+      tableName: `orders-${props.stackSuffix}`,
       partitionKey: { name: "pk", type: dynamodb.AttributeType.STRING },
       sortKey: { name: "sk", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -187,6 +193,7 @@ export class OrdersModule extends Construct {
       layers: [props.shared.layer.layer],
       environment: {
         ORDERS_TABLE: this.ordersTable.tableName,
+        ALLOWED_ORIGINS: props.shared.allowedOrigins.join(","),
       },
     });
     this.ordersTable.grantReadData(listOrdersFn);
@@ -220,6 +227,9 @@ export interface SharedInfra {
   audit: AuditLogConstruct;
   eventBus: EventBusConstruct;
   monitoring: MonitoringConstruct;
+  /** Exact origins allowed by every Lambda's CORS check.
+   *  Populated from cdk.json `cloudfrontDomains` plus any local dev URL. */
+  allowedOrigins: string[];
 }
 ```
 
@@ -320,31 +330,197 @@ import { OrdersModule } from "../modules/orders/infra/orders.module";
 import { UsersModule } from "../modules/users/infra/users.module";
 import { InventoryModule } from "../modules/inventory/infra/inventory.module";
 
+export interface BackendStackProps extends StackProps {
+  /** "dev" | "staging" | "prod". Source: CDK context. */
+  stage: string;
+  /** Developer suffix for the dev stage only ("alice", "bob", PR number...). */
+  suffix?: string;
+  /** Origins permitted by CORS. Built from cdk.json `cloudfrontDomains` plus
+   *  any `http://localhost:<port>` used during dev. */
+  allowedOrigins: string[];
+}
+
 export class BackendStack extends Stack {
-  constructor(scope: Construct, id: string, props: StackProps) {
+  constructor(scope: Construct, id: string, props: BackendStackProps) {
     super(scope, id, props);
 
-    // `stage` should come from CDK context (`this.node.tryGetContext('stage')`)
-    // or from StackProps so the same stack class can deploy to dev/staging/prod.
-    const stage = "dev";
+    // `stackSuffix` is the segment appended to every resource name so two
+    // developers can deploy the same stack in parallel without collisions.
+    // In prod/staging it equals the stage; in dev it equals `dev-<suffix>`.
+    const stackSuffix =
+      props.stage === "dev" ? `${props.stage}-${props.suffix}` : props.stage;
 
-    const shared = {
-      cognito: new CognitoConstruct(this, "Cognito", { stage }),
-      api: new ApiGatewayConstruct(this, "Api", { stage }),
+    const shared: SharedInfra = {
+      cognito: new CognitoConstruct(this, "Cognito", { stackSuffix }),
+      api: new ApiGatewayConstruct(this, "Api", { stackSuffix }),
       layer: new LambdaLayerConstruct(this, "Layer"),
       audit: new AuditLogConstruct(this, "Audit"),
       eventBus: new EventBusConstruct(this, "Events"),
       monitoring: new MonitoringConstruct(this, "Monitoring"),
+      allowedOrigins: props.allowedOrigins,
     };
 
-    new OrdersModule(this, "Orders", { shared, stage });
-    new UsersModule(this, "Users", { shared, stage });
-    new InventoryModule(this, "Inventory", { shared, stage });
+    new OrdersModule(this, "Orders", { shared, stage: props.stage, stackSuffix });
+    new UsersModule(this, "Users", { shared, stage: props.stage, stackSuffix });
+    new InventoryModule(this, "Inventory", { shared, stage: props.stage, stackSuffix });
   }
 }
 ```
 
 Each module receives the same `shared` object and uses whichever pieces it needs. A module that does not emit events does not have to use `shared.eventBus`. A module that does not have audit requirements does not have to touch `shared.audit`. But the consistent shape means every module has the same surface to work from, and adding a new shared concern later means updating the `SharedInfra` type once rather than threading a prop through every module.
+
+### `LambdaLayerConstruct` — concrete shape
+
+The shared layer is the single construct that every module depends on, so its layout is worth showing in full.
+
+```
+shared/layer/
+├── package.json            # declares the runtime dependencies bundled in the layer
+├── package-lock.json
+└── nodejs/                 # mandatory for Node.js layers; Lambda unpacks at /opt/nodejs
+    └── node_modules/       # (generated by npm install) — checked in or built in CI
+```
+
+The layer's `package.json` must pin the exact same versions of each dependency that the Lambda bundles declare as `externalModules`. A mismatch between the two surfaces as `MODULE_NOT_FOUND` at runtime even though `cdk synth` succeeded.
+
+```typescript
+// shared/infra/lambda-layer.construct.ts
+import * as path from "path";
+import { Construct } from "constructs";
+import * as cdk from "aws-cdk-lib";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+
+/** Names that `NodejsFunction.bundling.externalModules` in each module must
+ *  match exactly. Export one list and import it everywhere — drift between
+ *  the layer package.json and this list is the #1 runtime import failure. */
+export const LAYER_EXTERNAL_MODULES = [
+  "@aws-sdk/client-dynamodb",
+  "@aws-sdk/lib-dynamodb",
+  "@aws-sdk/client-secrets-manager",
+  "@aws-sdk/client-eventbridge",
+  "zod",
+  "uuid",
+] as const;
+
+export class LambdaLayerConstruct extends Construct {
+  public readonly layer: lambda.LayerVersion;
+
+  constructor(scope: Construct, id: string) {
+    super(scope, id);
+
+    this.layer = new lambda.LayerVersion(this, "SharedDepsLayer", {
+      code: lambda.Code.fromAsset(path.join(__dirname, "../../layer"), {
+        // CDK computes a content hash of the source directory. When any file
+        // in shared/layer/ changes, the hash changes and Lambda publishes a
+        // new layer version automatically. No manual version bump needed.
+        bundling: {
+          image: lambda.Runtime.NODEJS_20_X.bundlingImage,
+          // Install production deps into /asset-output/nodejs/node_modules.
+          // Lambda expects exactly this path — the `nodejs/` prefix is not
+          // optional for Node.js layers.
+          command: [
+            "bash",
+            "-c",
+            [
+              "mkdir -p /asset-output/nodejs",
+              "cp package.json package-lock.json /asset-output/nodejs/",
+              "cd /asset-output/nodejs && npm ci --omit=dev --no-audit --no-fund",
+            ].join(" && "),
+          ],
+        },
+      }),
+      compatibleRuntimes: [lambda.Runtime.NODEJS_20_X],
+      compatibleArchitectures: [lambda.Architecture.ARM_64],
+      description: "Shared runtime dependencies (AWS SDK, Zod, UUID).",
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+  }
+}
+```
+
+Every module's `NodejsFunction` then sets:
+
+```typescript
+layers: [props.shared.layer.layer],
+bundling: {
+  externalModules: [...LAYER_EXTERNAL_MODULES],  // from the construct file
+  // ... minify, sourceMap, target: "node20"
+},
+```
+
+The `externalModules` list tells `esbuild` not to bundle those packages into each Lambda zip — the runtime resolves them from `/opt/nodejs/node_modules/`, which is the layer. Omitting a package from `externalModules` forces `esbuild` to bundle it (which harmlessly increases the zip size); omitting it from the layer while keeping it in `externalModules` produces `MODULE_NOT_FOUND` at invoke time.
+
+### Unit-testing shared and module constructs with `aws-cdk-lib/assertions`
+
+Service, adapter, and handler tests cover runtime behaviour. CDK constructs need their own tests — synthesize the construct into a CloudFormation template and assert on its shape. This catches regressions like "somebody dropped `pointInTimeRecovery` from the prod table" without a deploy.
+
+```typescript
+// modules/orders/tests/orders.module.test.ts
+import * as cdk from "aws-cdk-lib";
+import { Template, Match } from "aws-cdk-lib/assertions";
+import { OrdersModule } from "../infra/orders.module";
+import { buildTestSharedInfra } from "../../../shared/infra/test-fixtures";
+
+describe("OrdersModule", () => {
+  test("prod deploy enables PITR and RETAIN on the orders table", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "TestStack");
+
+    new OrdersModule(stack, "Orders", {
+      shared: buildTestSharedInfra(stack, { stackSuffix: "prod" }),
+      stage: "prod",
+      stackSuffix: "prod",
+    });
+
+    const template = Template.fromStack(stack);
+
+    template.hasResourceProperties("AWS::DynamoDB::Table", {
+      TableName: "orders-prod",
+      BillingMode: "PAY_PER_REQUEST",
+      PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
+    });
+    template.hasResource("AWS::DynamoDB::Table", {
+      DeletionPolicy: "Retain",
+      UpdateReplacePolicy: "Retain",
+    });
+
+    // Every Lambda in the module runs on ARM64 and uses the shared layer.
+    template.allResourcesProperties("AWS::Lambda::Function", {
+      Architectures: ["arm64"],
+      Layers: Match.arrayWith([Match.anyValue()]),
+    });
+  });
+
+  test("dev deploy does not retain the table or enable PITR", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "TestStack");
+
+    new OrdersModule(stack, "Orders", {
+      shared: buildTestSharedInfra(stack, { stackSuffix: "dev-alice" }),
+      stage: "dev",
+      stackSuffix: "dev-alice",
+    });
+
+    const template = Template.fromStack(stack);
+    template.hasResource("AWS::DynamoDB::Table", {
+      DeletionPolicy: "Delete",
+    });
+    template.hasResourceProperties("AWS::DynamoDB::Table", {
+      // PITR absent, not `false` — CDK omits the spec when disabled.
+      PointInTimeRecoverySpecification: Match.absent(),
+    });
+  });
+});
+```
+
+The test suite lives in each module's `tests/` directory alongside the runtime tests. Key assertion types:
+
+- `template.hasResourceProperties(type, props)` — matches logical resource properties; `Match.anyValue()`, `Match.arrayWith([...])`, `Match.objectLike({...})`, `Match.absent()` make partial matches explicit.
+- `template.hasResource(type, meta)` — matches top-level CloudFormation metadata like `DeletionPolicy`, `DependsOn`.
+- `template.allResourcesProperties(type, props)` — asserts every resource of that type satisfies the shape; catches regressions where a new Lambda is added without the shared layer.
+- `template.resourceCountIs(type, n)` — asserts how many of a resource exist; good for "every handler declares its own log group" invariants.
+
+Keep these tests fast: they do not touch AWS, they do not deploy, and they run alongside the unit suite in CI. A failing construct test is a guardrail against a bad PR reaching `cdk deploy`.
 
 ## Section 6: Cross-module communication patterns
 

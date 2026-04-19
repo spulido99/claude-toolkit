@@ -18,7 +18,17 @@
 
 ## Section 1: Aurora Serverless v2 patterns
 
-Aurora Serverless v2 with scale-to-zero is the default choice for serverless relational storage. The cluster pauses compute after five minutes of inactivity and resumes on the next query, so the cost floor is storage-only. Two non-obvious requirements apply: the engine version must be PostgreSQL 16.3 or newer (earlier versions ignore `serverlessV2MinCapacity: 0`), and the Data API must be enabled so Lambdas can reach the cluster without being placed in a VPC.
+Aurora Serverless v2 with scale-to-zero is the default choice for serverless relational storage. The cluster pauses compute after an idle window (default five minutes, tunable via `serverlessV2AutoPauseDuration`) and resumes on the next query, so the cost floor is storage-only. Two non-obvious requirements apply: the engine version must be one that supports scale-to-zero, and the Data API must be enabled so Lambdas can reach the cluster without being placed in a VPC.
+
+**Engine versions that support scale-to-zero on Aurora PostgreSQL** (as of AWS's Q4 2024 rollout — verify current list in the RDS release notes before picking one for prod):
+
+- 13.15 and newer 13.x
+- 14.12 and newer 14.x
+- 15.7 and newer 15.x
+- 16.3 and newer 16.x
+- 17.4 and newer 17.x
+
+Earlier minor versions silently ignore `serverlessV2MinCapacity: 0` and leave the cluster at the explicit minimum. For Aurora MySQL, scale-to-zero is supported from 3.08.0 onward. The example below pins 16.3 for stability; upgrade to newer minors as they are validated in your environment.
 
 ```typescript
 import * as rds from "aws-cdk-lib/aws-rds";
@@ -101,7 +111,11 @@ import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
 
 interface OrderTableProps {
+  /** "dev" | "staging" | "prod" — drives isProd branching. */
   stage: string;
+  /** Per-deploy segment used in the table name so concurrent dev deploys
+   *  do not collide (see 06-deploy-workflow.md). */
+  stackSuffix: string;
 }
 
 export class OrderTable extends Construct {
@@ -113,7 +127,7 @@ export class OrderTable extends Construct {
     const isProd = props.stage === "prod";
 
     this.table = new dynamodb.Table(this, "Table", {
-      tableName: `orders-${props.stage}`,
+      tableName: `orders-${props.stackSuffix}`,
       partitionKey: { name: "pk", type: dynamodb.AttributeType.STRING },
       sortKey: { name: "sk", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -170,16 +184,13 @@ await client.send(new PutCommand({
 
 Why this fails: GSI reads are **eventually consistent**. `ConsistentRead: true` is not supported on GSIs. Even if it were, two concurrent writers that enter the handler within the same millisecond both see "not found" before either has written. The check-then-act sequence is not atomic.
 
-### Correct pattern — dedicated lookup table with `attribute_not_exists`
+### Correct pattern — `TransactWriteCommand` with a dedicated lookup table
 
-Use a second table whose partition key is the unique value itself. Write to that table with `ConditionExpression: "attribute_not_exists(email)"`. The condition is evaluated atomically by DynamoDB at write time against the base table's primary key — the same guarantee as any row-level write, so two concurrent writers cannot both succeed.
+Use a second table whose partition key is the unique value itself, and wrap both the reservation write and the user-row write in a single `TransactWriteCommand`. The condition is evaluated atomically by DynamoDB at write time against the base table's primary key — the same guarantee as any row-level write, so two concurrent writers cannot both succeed. Because both writes are in one transaction, either every item is persisted or none is. There is no rollback path to forget.
 
 ```typescript
-import {
-  PutCommand,
-  DeleteCommand,
-} from "@aws-sdk/lib-dynamodb";
-import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
+import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
+import { TransactionCanceledException } from "@aws-sdk/client-dynamodb";
 import { randomUUID } from "node:crypto";
 import { ErrorCodes, UserError } from "shared/types/api-responses";
 
@@ -197,6 +208,68 @@ interface User extends CreateUserInput {
 }
 
 async function createUser(input: CreateUserInput): Promise<User> {
+  const userId = randomUUID();
+
+  try {
+    await client.send(new TransactWriteCommand({
+      TransactItems: [
+        {
+          Put: {
+            TableName: USER_EMAILS_TABLE,
+            Item: {
+              email: input.email,
+              user_id: userId,
+              created_at: new Date().toISOString(),
+            },
+            ConditionExpression: "attribute_not_exists(email)",
+          },
+        },
+        {
+          Put: {
+            TableName: USERS_TABLE,
+            Item: {
+              pk: `USER#${userId}`,
+              sk: `USER#${userId}`,
+              ...input,
+              userId,
+            },
+            ConditionExpression: "attribute_not_exists(pk)",
+          },
+        },
+      ],
+    }));
+  } catch (err) {
+    if (err instanceof TransactionCanceledException) {
+      // err.CancellationReasons is an array aligned to TransactItems.
+      // Each entry has a Code like "ConditionalCheckFailed". Inspect
+      // to decide which write failed — the email conflict vs. the
+      // user-id collision (the latter should never happen with UUIDs).
+      const reasons = err.CancellationReasons ?? [];
+      if (reasons[0]?.Code === "ConditionalCheckFailed") {
+        throw new UserError(ErrorCodes.ALREADY_EXISTS, "Email already registered");
+      }
+    }
+    throw err;
+  }
+
+  return { ...input, userId };
+}
+```
+
+### Fallback pattern — two-step write with compensating delete
+
+`TransactWriteCommand` only works when every item lives in the same AWS account and region. When the uniqueness table must live in another account (central identity table shared by several product accounts) or in another region (geo-sharded writes), fall back to two sequential writes with a compensating delete.
+
+**Use this pattern only when transactions are not available.** The catch-block rollback is a liability: if the Lambda is killed between step 1 and the rollback, the reservation orphans and blocks future registrations for the same email until an operator cleans it up. If you are writing within a single account and region, use `TransactWriteCommand` above.
+
+```typescript
+import {
+  PutCommand,
+  DeleteCommand,
+} from "@aws-sdk/lib-dynamodb";
+import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
+
+async function createUserFallback(input: CreateUserInput): Promise<User> {
   const userId = randomUUID();
 
   // Step 1: reserve the email. If another writer already reserved it,
@@ -231,9 +304,11 @@ async function createUser(input: CreateUserInput): Promise<User> {
       },
     }));
   } catch (err) {
-    // Rollback the email reservation if the user create fails.
-    // Without this, a stale reservation blocks future registrations
-    // from the same email forever.
+    // Best-effort rollback. If the Lambda dies before this runs, the
+    // reservation is orphaned — operational runbooks must document the
+    // manual cleanup. Pair this pattern with a periodic sweep that
+    // deletes reservations older than N minutes whose user_id has no
+    // matching row in USERS.
     await client.send(new DeleteCommand({
       TableName: USER_EMAILS_TABLE,
       Key: { email: input.email },
@@ -242,57 +317,6 @@ async function createUser(input: CreateUserInput): Promise<User> {
   }
 
   return { ...input, userId };
-}
-```
-
-### Preferred alternative — `TransactWriteCommand`
-
-Two sequential writes with a compensating delete works, but the rollback path is a liability: if the Lambda is killed between step 1 and the rollback in the catch block, the reservation orphans. Use `TransactWriteCommand` instead when both writes live in the same account and region. DynamoDB applies all items atomically: either every write happens, or none does.
-
-```typescript
-import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
-import { TransactionCanceledException } from "@aws-sdk/client-dynamodb";
-
-try {
-  await client.send(new TransactWriteCommand({
-    TransactItems: [
-      {
-        Put: {
-          TableName: USER_EMAILS_TABLE,
-          Item: {
-            email: input.email,
-            user_id: userId,
-            created_at: new Date().toISOString(),
-          },
-          ConditionExpression: "attribute_not_exists(email)",
-        },
-      },
-      {
-        Put: {
-          TableName: USERS_TABLE,
-          Item: {
-            pk: `USER#${userId}`,
-            sk: `USER#${userId}`,
-            ...input,
-            userId,
-          },
-          ConditionExpression: "attribute_not_exists(pk)",
-        },
-      },
-    ],
-  }));
-} catch (err) {
-  if (err instanceof TransactionCanceledException) {
-    // err.CancellationReasons is an array aligned to TransactItems.
-    // Each entry has a Code like "ConditionalCheckFailed". Inspect
-    // to decide whether it was the email conflict or the user-id
-    // collision (which should never happen with UUIDs).
-    const reasons = err.CancellationReasons ?? [];
-    if (reasons[0]?.Code === "ConditionalCheckFailed") {
-      throw new UserError(ErrorCodes.ALREADY_EXISTS, "Email already registered");
-    }
-  }
-  throw err;
 }
 ```
 
@@ -408,7 +432,7 @@ Two implementation notes:
 
 | Symptom | Root cause | Fix |
 |---|---|---|
-| Aurora Serverless v2 scale-to-zero does not engage; cluster stays at min capacity > 0. | PostgreSQL engine version below 16.3. Earlier versions silently ignore `serverlessV2MinCapacity: 0`. | Upgrade `AuroraPostgresEngineVersion` to `VER_16_3` or newer; redeploy the stack. |
+| Aurora Serverless v2 scale-to-zero does not engage; cluster stays at min capacity > 0. | Engine version does not support scale-to-zero. For Aurora PostgreSQL, supported versions are 13.15+, 14.12+, 15.7+, 16.3+, 17.4+ (earlier minors silently ignore `serverlessV2MinCapacity: 0`). For Aurora MySQL, 3.08.0+. | Upgrade `AuroraPostgresEngineVersion` / `AuroraMysqlEngineVersion` to a supported version; redeploy the stack. Verify the current supported-version list in the RDS release notes before pinning. |
 | First query after idle period takes 5-15 seconds. | Auto-pause kicked in after the five-minute idle window. | Expected behavior. Accept the first-query latency, add a warmup ping on a schedule for user-facing paths, or raise `serverlessV2MinCapacity` above zero for latency-critical clusters. |
 | `Export <name> cannot be removed as it is in use by <stack>` on a cross-stack deploy. | Removed an export from the producer stack while the consumer still references it. | Remove the reference from the consumer stack first, deploy the consumer, then remove the export from the producer and deploy again. |
 | Two users registered with the same email within milliseconds in production. | GSI-query-then-write uniqueness pattern instead of a lookup table with `attribute_not_exists`. | Migrate to the dedicated lookup-table pattern in Section 4. Backfill the lookup table from the existing GSI before enabling the new code path. |

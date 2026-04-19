@@ -20,7 +20,7 @@ Cognito is used as a token broker in front of Google. Users never hold a Cognito
 ### Components
 
 - **`UserPool`** — Federated-only. `selfSignUpEnabled: false` to prevent open registration, and no password policy exposed to end users because there is no password flow. Email is the sign-in alias so the user record can be looked up by the verified Google email claim.
-- **`UserPoolIdentityProviderGoogle`** — Links the pool to a Google OAuth 2.0 client. The `clientId` and `clientSecret` values live in AWS Secrets Manager, referenced through `cdk.SecretValue.secretsManager()` so they resolve at deploy time via CloudFormation dynamic references rather than being baked into the synthesized template.
+- **`UserPoolIdentityProviderGoogle`** — Links the pool to a Google OAuth 2.0 client. The Google **`clientId` is passed as plain CDK context** (it is public OAuth metadata — it appears in every authorize redirect URL, so it is not a secret and does not belong in Secrets Manager). Only the **`clientSecret`** is loaded from Secrets Manager through `cdk.SecretValue.secretsManager()`, resolved at deploy time via a CloudFormation dynamic reference so the literal value never enters the synthesized template. This lets the construct use the current `clientSecretValue: SecretValue` prop and avoids `SecretValue.unsafeUnwrap()` entirely.
 - **`UserPoolClient`** — The application-facing client. OAuth2 authorization-code grant is enabled; implicit grant and password flows are disabled. `supportedIdentityProviders` lists only Google, so the hosted UI skips the username/password form and redirects straight to Google. Callback and logout URLs are injected as props so each environment (dev, staging, prod) gets its own allowlist.
 - **`UserPoolDomain`** — A Cognito-hosted UI domain (`https://<prefix>.auth.<region>.amazoncognito.com`) that serves the federation entry point and the OAuth endpoints. A custom domain (with an ACM certificate and a DNS record) is an alternative for production when a branded login URL is required.
 
@@ -46,14 +46,17 @@ import * as cognito from "aws-cdk-lib/aws-cognito";
 export interface CognitoConstructProps {
   /** Stage name: "dev" | "staging" | "prod". Used for naming and removal policy. */
   stage: string;
+  /** Unique per-deploy segment appended to resource names. */
+  stackSuffix: string;
   /** OAuth2 callback URLs allowed for this environment. */
   callbackUrls: string[];
   /** OAuth2 logout URLs allowed for this environment. */
   logoutUrls: string[];
-  /**
-   * Name of the Secrets Manager secret that holds Google OAuth credentials.
-   * Secret JSON shape: { "clientId": "...", "clientSecret": "..." }.
-   */
+  /** Google OAuth client ID. Public OAuth metadata (appears in the authorize
+   *  redirect URL), so it is passed as plain CDK context, not a SecretValue. */
+  googleClientId: string;
+  /** Name of the Secrets Manager secret that holds the Google OAuth client
+   *  secret. Secret JSON shape: { "clientSecret": "..." }. */
   googleSecretName: string;
 }
 
@@ -69,7 +72,7 @@ export class CognitoConstruct extends Construct {
 
     // User Pool — federated sign-in only, no password flows.
     this.userPool = new cognito.UserPool(this, "UserPool", {
-      userPoolName: `app-${props.stage}`,
+      userPoolName: `app-${props.stackSuffix}`,
       selfSignUpEnabled: false,
       signInAliases: { email: true },
       standardAttributes: {
@@ -83,12 +86,13 @@ export class CognitoConstruct extends Construct {
         : cdk.RemovalPolicy.DESTROY,
     });
 
-    // Google IdP — clientId and clientSecret pulled from Secrets Manager
-    // via CloudFormation dynamic references; resolved at deploy, not at synth.
-    const googleClientId = cdk.SecretValue.secretsManager(
-      props.googleSecretName,
-      { jsonField: "clientId" },
-    );
+    // Google IdP.
+    // `clientId` is not a secret — it is public OAuth metadata that appears
+    // in every authorize redirect URL — so it is passed as plain CDK context.
+    // `clientSecretValue` is a `SecretValue.secretsManager(...)` so the
+    // literal value resolves at deploy via a CloudFormation dynamic reference
+    // and never appears in the synthesized template. This combination lets
+    // the construct drop the `unsafeUnwrap()` workaround older code used.
     const googleClientSecret = cdk.SecretValue.secretsManager(
       props.googleSecretName,
       { jsonField: "clientSecret" },
@@ -99,10 +103,7 @@ export class CognitoConstruct extends Construct {
       "GoogleIdP",
       {
         userPool: this.userPool,
-        // `unsafeUnwrap` is required because `clientId` expects a string, not
-        // a token. The value is still a CloudFormation dynamic reference; the
-        // literal secret never appears in the synthesized template.
-        clientId: googleClientId.unsafeUnwrap(),
+        clientId: props.googleClientId,
         clientSecretValue: googleClientSecret,
         scopes: ["email", "profile", "openid"],
         attributeMapping: {
@@ -116,7 +117,7 @@ export class CognitoConstruct extends Construct {
     // User Pool Client — OAuth2 authorization code grant, Google only.
     this.userPoolClient = new cognito.UserPoolClient(this, "Client", {
       userPool: this.userPool,
-      userPoolClientName: `app-${props.stage}-client`,
+      userPoolClientName: `app-${props.stackSuffix}-client`,
       generateSecret: false,
       authFlows: {
         userSrp: false,
@@ -159,7 +160,7 @@ export class CognitoConstruct extends Construct {
     // record pointing at the alias target returned by Cognito.
     this.domain = new cognito.UserPoolDomain(this, "Domain", {
       userPool: this.userPool,
-      cognitoDomain: { domainPrefix: `app-${props.stage}` },
+      cognitoDomain: { domainPrefix: `app-${props.stackSuffix}` },
     });
 
     // Outputs — exported for the API stack (authorizer) and the frontend
@@ -167,15 +168,15 @@ export class CognitoConstruct extends Construct {
     // pattern that threads these values to the SPA.
     new cdk.CfnOutput(this, "UserPoolId", {
       value: this.userPool.userPoolId,
-      exportName: `${props.stage}-UserPoolId`,
+      exportName: `${props.stackSuffix}-UserPoolId`,
     });
     new cdk.CfnOutput(this, "UserPoolClientId", {
       value: this.userPoolClient.userPoolClientId,
-      exportName: `${props.stage}-UserPoolClientId`,
+      exportName: `${props.stackSuffix}-UserPoolClientId`,
     });
     new cdk.CfnOutput(this, "UserPoolDomainName", {
       value: this.domain.domainName,
-      exportName: `${props.stage}-UserPoolDomainName`,
+      exportName: `${props.stackSuffix}-UserPoolDomainName`,
     });
   }
 }
@@ -185,14 +186,21 @@ Consume the construct from the main backend stack, passing stage-specific contex
 
 ```typescript
 const googleSecretName =
-  this.node.tryGetContext("googleSecretName") ?? "google-oauth";
+  this.node.tryGetContext("googleSecretName") ?? `google-oauth-${stage}`;
+const googleClientId = this.node.tryGetContext(`googleClientId.${stage}`) as string;
 const callbackUrls = this.node.tryGetContext(`callbackUrls.${stage}`) as string[];
 const logoutUrls = this.node.tryGetContext(`logoutUrls.${stage}`) as string[];
 
+if (!googleClientId) {
+  throw new Error(`Missing cdk.json context: googleClientId.${stage}`);
+}
+
 const auth = new CognitoConstruct(this, "Auth", {
   stage,
+  stackSuffix,
   callbackUrls,
   logoutUrls,
+  googleClientId,
   googleSecretName,
 });
 ```
@@ -206,7 +214,8 @@ const auth = new CognitoConstruct(this, "Auth", {
 | 3 | Manual fixes in the AWS Console disappear on the next `cdk deploy` | Only CDK changes are idempotent; Console edits are drift and get overwritten | Never edit Cognito resources via the Console. All changes go through CDK plus `cdk deploy` |
 | 4 | Frontend lands on `/oauth2/idpresponse` and sees `invalid_request` or a CORS error at callback | The frontend origin is not in `callbackUrls` or `logoutUrls` | Register every environment's frontend origin (`http://localhost:5173` for dev, the CloudFront distribution for the rest) via CDK context; see `03-static-site.md` for the `cdk.json` pattern |
 | 5 | `Set-Cookie` succeeds but a subsequent clear leaves the session cookie intact | Browsers silently refuse to clear a cookie unless `Path`, `Domain`, `Secure`, and `SameSite` match exactly | Share one cookie config between set and clear; see `05-shared-utilities.md` gotcha #2 |
-| 6 | Google `clientId` ends up as an empty string in the synthesized CloudFormation template | The value was read via `process.env.GOOGLE_CLIENT_ID` at synth time on a machine without the env var set | Use `cdk.SecretValue.secretsManager(name, { jsonField })` so the value resolves at deploy via a CloudFormation dynamic reference; never call `process.env` for secrets |
+| 6 | Google `clientSecret` ends up as an empty string (or leaks) in the synthesized CloudFormation template | The value was read at synth time (e.g., via `process.env.GOOGLE_CLIENT_SECRET` or JSON-parsed from a local file) on a machine where that source was empty or wrong | Wrap the secret in `cdk.SecretValue.secretsManager(name, { jsonField: "clientSecret" })` and pass it as `clientSecretValue`. The value then resolves at deploy via a CloudFormation dynamic reference and never enters the template. Never call `process.env` for secrets inside CDK constructs. |
+| 6b | CDK code calls `SecretValue.unsafeUnwrap()` on the Google `clientId` | Older examples wrapped `clientId` in Secrets Manager and unwrapped it, because the construct accepted `clientId: string` only. `clientId` is public OAuth metadata (visible in every authorize URL) and does not belong in Secrets Manager | Move `clientId` to `cdk.json` context (`googleClientId.<stage>`). Only `clientSecret` stays in Secrets Manager, consumed via `clientSecretValue: SecretValue`. `unsafeUnwrap` disappears entirely. |
 | 7 | JWT validation succeeds in prod but fails locally with `Invalid issuer` or `Invalid audience` | The frontend hardcoded the pool id, client id, or domain for one environment | Frontend must fetch `config.json` generated by the frontend stack (see `00-architecture.md` chicken-and-egg section); never hardcode Cognito identifiers |
 | 8 | Attacker probes the login endpoint and learns which emails are registered | `preventUserExistenceErrors` defaults to `LEGACY`, which returns distinguishable responses for known vs. unknown users | Always set `preventUserExistenceErrors: true` on the client; Cognito then returns a uniform error |
 
@@ -214,16 +223,28 @@ const auth = new CognitoConstruct(this, "Auth", {
 
 ### Create the Google OAuth secret (one-time, per environment)
 
-The Google `clientId` and `clientSecret` come from Google Cloud Console, not from CDK. Create one secret per environment:
+The Google `clientId` and `clientSecret` come from Google Cloud Console, not from CDK. The `clientId` is not sensitive (it appears in every OAuth authorize URL), so it goes to `cdk.json` context under `googleClientId.<stage>`. Only `clientSecret` belongs in Secrets Manager:
 
 ```bash
 aws secretsmanager create-secret \
   --name google-oauth-dev \
-  --secret-string '{"clientId":"XXXX.apps.googleusercontent.com","clientSecret":"YYYY"}' \
+  --secret-string '{"clientSecret":"YYYY"}' \
   --profile <aws-profile>
 ```
 
-Repeat for `google-oauth-staging` and `google-oauth-prod` with distinct Google OAuth clients. Reference the name from CDK context, not the value; the secret content never enters the repo or the CloudFormation template.
+Repeat for `google-oauth-staging` and `google-oauth-prod` with distinct Google OAuth clients. Reference the secret name from CDK context, not the value; the secret content never enters the repo or the CloudFormation template.
+
+Register the per-stage `clientId` in `cdk.json`:
+
+```json
+{
+  "context": {
+    "googleClientId.dev":     "XXXX-dev.apps.googleusercontent.com",
+    "googleClientId.staging": "XXXX-stg.apps.googleusercontent.com",
+    "googleClientId.prod":    "XXXX-prod.apps.googleusercontent.com"
+  }
+}
+```
 
 ### Google Cloud Console setup
 

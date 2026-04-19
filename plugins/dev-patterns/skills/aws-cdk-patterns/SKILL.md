@@ -1,6 +1,6 @@
 ---
-name: AWS CDK Patterns
-description: Use when writing AWS CDK code in TypeScript — starting a new CDK project, building serverless APIs with Lambda and DynamoDB, adding authentication with Cognito, hosting a single-page app on S3 and CloudFront, designing DynamoDB access patterns, writing Lambda handlers, or running CDK deploys. Provides a recommended hexagonal + DDD architecture, validated construct patterns, shared utilities, and a catalog of known gotchas.
+name: aws-cdk-patterns
+description: Use when writing AWS CDK code in TypeScript — starting a new CDK project, building serverless APIs with Lambda and DynamoDB, adding authentication with Cognito, hosting a single-page app on S3 and CloudFront, designing DynamoDB access patterns, writing Lambda handlers, or running CDK deploys.
 ---
 
 # AWS CDK Patterns

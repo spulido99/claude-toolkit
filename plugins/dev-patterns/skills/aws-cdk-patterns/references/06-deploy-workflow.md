@@ -49,7 +49,17 @@ Confirm the returned `Account` and `Arn` match the target environment before con
 
 ### Step 3 — Verify no hardcoded secrets appear in the diff
 
-Scan the `cdk diff` output for any literal secret values. Secrets must appear only as Secrets Manager ARN references — never as plain strings embedded in Lambda environment variables or CloudFormation parameters.
+Scan the `cdk diff` output for any literal secret values. Secrets must appear only as Secrets Manager ARN references or CloudFormation dynamic references (`{{resolve:secretsmanager:...}}`) — never as plain strings embedded in Lambda environment variables or CloudFormation parameters.
+
+Eyeballing the diff catches obvious cases but is not reliable. Pipe the diff through a secret scanner as part of the pre-deploy step:
+
+```bash
+# Pick one of these and wire it into the pre-deploy script.
+cdk diff --all -c stage=<stage> --profile <project> | gitleaks detect --no-git --pipe
+cdk diff --all -c stage=<stage> --profile <project> | trufflehog --no-update --json --pipe
+```
+
+Either tool flags high-entropy strings, well-known key formats (AWS, GitHub, Stripe, Slack, Google, OpenAI), and a long list of regex-based detections. Gate the deploy on a clean scanner exit code.
 
 If a literal password, API key, or token appears in the diff, stop the deploy. Identify how the value entered the CDK source, replace it with a Secrets Manager reference, re-diff, and confirm the value is gone before deploying.
 

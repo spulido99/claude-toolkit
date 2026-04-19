@@ -125,23 +125,34 @@ function getCorsOrigin(requestOrigin: string | undefined): string {
   return allowed[0] ?? "";
 }
 
+/**
+ * Build the CORS + security + request-id headers that every response must carry.
+ * Kept as a pure helper so both `createResponse` and `withCors` can apply the
+ * same set without stringifying a throwaway body.
+ */
+function buildCorsAndSecurityHeaders(
+  event?: APIGatewayProxyEvent,
+): Record<string, string> {
+  const origin = event?.headers?.origin ?? event?.headers?.Origin;
+  return {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": getCorsOrigin(origin),
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+    "X-Request-Id": randomUUID(),
+    ...SECURITY_HEADERS,
+  };
+}
+
 export function createResponse<T>(
   statusCode: number,
   body: ApiResponse<T>,
   event?: APIGatewayProxyEvent,
 ): APIGatewayProxyResult {
-  const origin = event?.headers?.origin ?? event?.headers?.Origin;
   return {
     statusCode,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": getCorsOrigin(origin),
-      "Access-Control-Allow-Credentials": "true",
-      "Access-Control-Allow-Headers": "Content-Type,Authorization",
-      "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-      "X-Request-Id": randomUUID(),
-      ...SECURITY_HEADERS,
-    },
+    headers: buildCorsAndSecurityHeaders(event),
     body: JSON.stringify(body),
   };
 }
@@ -152,12 +163,15 @@ export function withCors(
   return async (event) => {
     try {
       const response = await handler(event);
-      // Ensure CORS headers are present even if the inner handler forgot.
+      // CORS / security headers win over anything the inner handler set.
+      // A handler that tries to return `Access-Control-Allow-Origin: *` is
+      // a bug — this wrapper exists precisely to prevent that from reaching
+      // the wire.
       return {
         ...response,
         headers: {
-          ...createResponse(response.statusCode, { success: true }, event).headers,
           ...response.headers,
+          ...buildCorsAndSecurityHeaders(event),
         },
       };
     } catch (err) {
@@ -286,6 +300,21 @@ const { TABLE_NAME, SECRET_ARN, ALLOWED_ORIGINS } = validateEnv([
 - **Call `validateEnv` at module scope** (outside the handler), so missing env vars fail at cold start rather than mid-request. A handler that throws on its first real invocation produces a confusing 5xx instead of a clean init failure in CloudWatch.
 - **Never use `process.env.X || ''`.** It silently passes empty strings downstream. DynamoDB calls with an empty table name, Secrets Manager calls with an empty ARN, and similar failures appear far from their root cause.
 - **The return type is typed via `as const` inference.** Each key becomes a required string property. Destructuring into named constants preserves the types at every use site.
+
+**Convention: one `config.ts` per module.** Every module (`modules/orders`, `modules/users`, ...) should declare its env contract exactly once, in a shared config file that handlers and adapters both import. Calling `validateEnv` in each handler and each adapter "works" but creates two places to drift:
+
+```typescript
+// modules/orders/src/config.ts
+import { validateEnv } from "shared/utils/validate-env";
+
+export const config = validateEnv([
+  "ORDERS_TABLE",
+  "ALLOWED_ORIGINS",
+  "GOOGLE_OAUTH_SECRET_ARN",
+] as const);
+```
+
+Handlers and adapters import `config.ORDERS_TABLE` instead of re-calling `validateEnv`. The env contract lives in one place per module and the fail-fast behaviour is preserved (the first cold-start import of `config.ts` runs the check).
 
 ## Section 6: Secrets loading with cold-start cache
 

@@ -62,7 +62,13 @@ import * as targets from "aws-cdk-lib/aws-route53-targets";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
 
 export interface FrontendStackProps extends cdk.StackProps {
+  /** "dev" | "staging" | "prod" — drives isProd branching. */
   stage: string;
+  /** Per-deploy segment ("dev-alice", "staging", "prod"). Used in every
+   *  globally scoped name (S3 bucket). Two developers deploying to the same
+   *  AWS account must receive distinct suffixes or S3 rejects the second
+   *  CreateBucket with BucketAlreadyOwnedByYou. */
+  stackSuffix: string;
   // Backend outputs wired into config.json
   cognitoUserPoolId: string;
   cognitoClientId: string;
@@ -87,7 +93,7 @@ export class FrontendStack extends cdk.Stack {
     // No websiteIndexDocument — that would conflict with blockPublicAccess.
     // CloudFront's defaultRootObject handles the index page.
     const siteBucket = new s3.Bucket(this, "SiteBucket", {
-      bucketName: `frontend-${props.stage}-${this.account}`,
+      bucketName: `frontend-${props.stackSuffix}-${this.account}`,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
       removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
@@ -109,7 +115,15 @@ export class FrontendStack extends cdk.Stack {
         origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
-        originRequestPolicy: cloudfront.OriginRequestPolicy.CORS_S3_ORIGIN,
+        // No originRequestPolicy. A pure SPA fetches its own assets (same
+        // origin), so the `Origin` header does not need to be forwarded to
+        // S3. Forwarding it (e.g. with `OriginRequestPolicy.CORS_S3_ORIGIN`)
+        // adds the header to the cache key and fragments the cache per
+        // requesting origin, reducing edge hit rate with no benefit.
+        // If cross-origin access to CloudFront is required (e.g. the SPA is
+        // served from one domain but embeds assets on another), attach a
+        // `ResponseHeadersPolicy` (see below) — CORS is enforced at the
+        // CloudFront response, not by forwarding to the origin.
         compress: true,
       },
       // SPA routing: let React/Vue/Angular router handle all paths.
@@ -160,6 +174,7 @@ export class FrontendStack extends cdk.Stack {
           cognitoDomain: props.cognitoDomain,
           apiUrl: props.apiUrl,
           stage: props.stage,
+          stackSuffix: props.stackSuffix,
         }),
       ],
       destinationBucket: siteBucket,
@@ -274,6 +289,7 @@ The `<site-bucket-name>` and `<distribution-id>` are available in the CloudForma
 | 5 | First deploy succeeds but Cognito redirect or CORS fails immediately | CloudFront domain not yet registered in `cdk.json` context; backend CORS allowlist is empty or stale | Follow Section 3: record the CloudFront domain in `cdk.json.context.cloudfrontDomains`, then re-deploy both stacks. |
 | 6 | `cdk deploy` fails with "Cannot find asset `../frontend/dist`" | `frontend/dist` directory does not exist because the frontend was not built before deploy | Run `npm run build` (or the equivalent) inside the `frontend/` directory before `cdk deploy`. Verify the relative path matches the CDK app entry point location. |
 | 7 | Site is unreachable for ~20 minutes after the first deploy | CloudFront edge cache warm-up after distribution creation | Expected. Subsequent deploys propagate within ~5 minutes. `nslookup <distribution-domain>` confirms DNS has resolved; 503/504 during warm-up is transient. |
+| 8 | `cdk destroy` on a dev stack fails with the bucket emptying Lambda timing out; the stack stays in `DELETE_FAILED` | `autoDeleteObjects: true` installs a custom-resource Lambda that issues `DeleteObjects` in batches before the bucket is deleted. With tens of thousands of objects (e.g. many past deploys of a frontend bundle), the Lambda hits its 15-minute limit | Empty the bucket manually first: `aws s3 rm s3://<bucket> --recursive --profile <project>` (paginates server-side, no timeout), then re-run `cdk destroy`. For frontends that accumulate many deploy artefacts, add an S3 lifecycle rule to expire old versions / old prefixes so the bucket stays small. |
 
 ---
 

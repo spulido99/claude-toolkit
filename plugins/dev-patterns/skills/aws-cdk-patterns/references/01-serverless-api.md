@@ -211,7 +211,12 @@ import type { SharedInfra } from "shared/infra/types";
 
 export interface OrdersModuleProps {
   shared: SharedInfra;
+  /** "dev" | "staging" | "prod" — drives isProd branching. */
   stage: string;
+  /** Per-deploy segment ("dev-alice", "staging", "prod") appended to resource
+   *  names so two developers can deploy to the same AWS account without
+   *  colliding on table names, log groups, or Lambdas. */
+  stackSuffix: string;
 }
 
 const LAYER_EXTERNAL_MODULES = [
@@ -231,7 +236,7 @@ export class OrdersModule extends Construct {
     const isProd = props.stage === "prod";
 
     this.ordersTable = new dynamodb.Table(this, "OrdersTable", {
-      tableName: `orders-${props.stage}`,
+      tableName: `orders-${props.stackSuffix}`,
       partitionKey: { name: "pk", type: dynamodb.AttributeType.STRING },
       sortKey: { name: "sk", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -246,7 +251,7 @@ export class OrdersModule extends Construct {
     });
 
     const listOrdersLogGroup = new logs.LogGroup(this, "ListOrdersLogs", {
-      logGroupName: `/aws/lambda/orders-list-${props.stage}`,
+      logGroupName: `/aws/lambda/orders-list-${props.stackSuffix}`,
       retention: isProd ? logs.RetentionDays.SIX_MONTHS : logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -356,7 +361,7 @@ A 401 response means the authorizer rejected the token — check the token's iss
 
 ```bash
 aws dynamodb query \
-  --table-name orders-<stage> \
+  --table-name orders-<stackSuffix> \
   --index-name user_id-index \
   --key-condition-expression "user_id = :u" \
   --expression-attribute-values '{":u":{"S":"<cognito-sub>"}}' \
@@ -367,7 +372,7 @@ The returned `Items` array must match the handler's response. A mismatch means e
 
 ### 4. Check CloudWatch logs
 
-The explicit log group is `/aws/lambda/orders-list-<stage>`. Structured log lines emitted by the handler — request ID, user ID, duration — should appear within a few seconds of the request. If the log group is empty the Lambda may have failed before emitting any logs (usually an import-time error from `validateEnv`); in that case the Lambda metrics `Errors` and `Invocations` will show non-zero counts even with no log output, and the detail lives in the Lambda configuration's execution role / VPC / runtime errors surface.
+The explicit log group is `/aws/lambda/orders-list-<stackSuffix>`. Structured log lines emitted by the handler — request ID, user ID, duration — should appear within a few seconds of the request. If the log group is empty the Lambda may have failed before emitting any logs (usually an import-time error from `validateEnv`); in that case the Lambda metrics `Errors` and `Invocations` will show non-zero counts even with no log output, and the detail lives in the Lambda configuration's execution role / VPC / runtime errors surface.
 
 ## Section 7: Further reading
 
