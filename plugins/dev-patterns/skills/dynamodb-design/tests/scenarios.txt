@@ -1,0 +1,7 @@
+Design a DynamoDB schema for a task manager with users, projects, tasks, and comments. List access patterns first, then derive keys.
+How do I add a "list orders by status" access pattern to an existing orders table? The current keys are pk=USER#<id>, sk=ORDER#<created_at>.
+I need to migrate from a status-index GSI to sort-key prefixes without downtime. Describe the cutover.
+My DynamoDB writes throttle under synthetic load tests but run fine in production. What is the likely cause and fix?
+Implement a sharded counter for daily page views that a hot article would otherwise overwhelm.
+Wire a DynamoDB Stream to a Lambda that projects item changes into OpenSearch. The consumer must be idempotent.
+Add optimistic locking to a user-profile update endpoint so a stale write cannot silently clobber a newer one.
