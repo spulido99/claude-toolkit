@@ -82,24 +82,9 @@ Key points:
 
 ## Section 2: DynamoDB — single-table vs multi-table decision tree
 
-Single-table design collapses every entity in a bounded context into one table with composite keys. Multi-table design gives each entity its own table. Both are valid, and neither is universally correct. Choose based on access patterns, ownership, and sync semantics — not on folklore.
+Choosing between single-table (one table, all entities in a bounded context share composite keys) and multi-table (one table per entity type) is a modeling decision, not a CDK decision. The **canonical decision tree — including per-criterion guidance on ownership, sync semantics, TTL divergence, and scaling characteristics — lives in `../../dynamodb-design/references/01-modeling.md`** (single-table vs multi-table section). Summary: prefer single-table when all entities belong to one tightly coupled aggregate with 5-10 homogeneous access patterns; prefer multi-table when bounded contexts have distinct ownership, divergent TTL or retention, or independent scaling characteristics. Neither is universally correct.
 
-**Choose single-table when:**
-
-- All entities belong to a single, tightly coupled bounded context — typically one aggregate root and its children (for example, a user and their saved preferences, addresses, and tokens).
-- Access patterns are homogeneous and bounded in count (roughly 5-10 queries total across all entities in the context).
-- Cost optimization on the tail is important. Fewer tables means fewer minimum provisioning commitments, fewer CloudWatch metrics streams, and lower baseline cost.
-- Queries routinely cross entity boundaries and benefit from returning multiple entity types in a single `Query` — for example, fetching a user plus their recent orders and reviews in one call using a shared partition key.
-
-**Choose multi-table when:**
-
-- Multiple bounded contexts need distinct access patterns. Merging them hides the boundary and invites accidental coupling.
-- Offline/online sync is per-domain. Each domain has its own sync strategy, and a per-table model makes the sync cursor, conflict resolution, and retention independent.
-- TTL or retention differs by domain. One entity lives forever, another expires in seven days — `timeToLiveAttribute` is a table-level setting.
-- Team ownership boundaries differ. When two teams own two domains, two tables make responsibility concrete and prevent a noisy neighbor from destabilizing an unrelated access pattern.
-- Scaling characteristics diverge. One entity is hot and bursts to thousands of writes per second; another is cold and writes a few times per day. Separate tables keep hot-partition diagnosis per-table and let each table be tuned independently.
-
-State it explicitly: **neither pattern is universally correct.** The rest of this file documents construct patterns that work identically in both; the access-pattern sections (atomic uniqueness, identity-verified updates, pagination) assume whichever shape fits the domain.
+The construct patterns in §3 and the runtime patterns in §4-6 work identically in both shapes — this section only flags the decision.
 
 ## Section 3: DynamoDB construct patterns
 
