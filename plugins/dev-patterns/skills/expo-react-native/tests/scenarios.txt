@@ -1,0 +1,8 @@
+Scaffold a new Expo app with expo-router, Zustand, TanStack Query, and a Cognito login screen. Show the feature-folder structure and eas.json with three profiles.
+Add a protected /settings route with a sign-out button to an existing expo-router app. The user must be redirected to /login if not authenticated, without a tab-bar flash.
+Wire Cognito + Google federation via expo-auth-session, including token refresh on 401 with single-flight coordination and SecureStore token caching.
+Add push notifications via expo-notifications with APNS and FCM, including a deep link that opens /orders/:id when the user taps the notification.
+Implement offline sync for cart mutations with TanStack Query optimistic updates and a retry queue that survives app restart. Handle stale-data 409 conflicts from the server.
+Add a RevenueCat paywall reachable from a deep link at /paywall?sku=premium_monthly, with restore-purchases flow and post-purchase entitlement check.
+Audit this screen for VoiceOver / TalkBack accessibility and RTL support. Return a checklist of issues with fixes.
+Diagnose: my OTA update is published with `eas update --channel production` but TestFlight devices on preview profile never receive it.
