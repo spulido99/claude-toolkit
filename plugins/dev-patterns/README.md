@@ -64,6 +64,43 @@ Stack-agnostic methodology for designing DynamoDB schemas from access patterns. 
 - Local testing with DynamoDB Local, testcontainers (`GenericContainer`), and LocalStack (for Streams + Lambda), per-access-pattern tests covering happy path + race + retry-cap-exceeded
 - Gotchas catalog with 53 symptom → cause → fix rows across Design, Throughput, Write semantics, Streams, Evolution, Testing, and Expressions
 
+### `expo-react-native`
+
+End-to-end patterns for building Expo / React Native apps with the managed workflow + dev client. Closes the three-skill roadmap of `dev-patterns` — covers greenfield scaffolding, extension patterns, and backend integration with `aws-cdk-patterns` + `dynamodb-design`.
+
+**Decision tree** (in `SKILL.md`) routes by task:
+
+| Task | Reference file |
+|------|----------------|
+| Starting a new Expo app | `00-architecture.md` + `01-navigation.md` |
+| Adding a new screen or route | `01-navigation.md` |
+| Client state, server state, or offline sync | `02-state-and-data.md` |
+| Cognito / Google sign-in, API calls with auth | `03-auth-and-networking.md` |
+| Push notifications, OTA updates, EAS Build / Submit, IAP config | `04-native-and-release.md` |
+| Shipping to web / PWA | `05-cross-platform-web.md` |
+| Performance tuning or test setup | `06-performance-and-testing.md` |
+| Localization, RTL, or accessibility audit | `07-i18n-and-accessibility.md` |
+| Crash reporting or analytics | `08-observability.md` |
+| Subscriptions, paywalls, receipt validation | `09-monetization.md` |
+| Diagnosing a production symptom | `10-gotchas.md` |
+
+**Key topics covered:**
+
+- Project scaffold (feature-folder / DDD structure, managed workflow + dev client, config plugins, EAS profiles with per-environment bundle IDs and channels)
+- `expo-router` file-based routing, nested layouts, typed routes, protected routes with `<Redirect />`, universal / app links, paywall deep-link entry
+- Client state (Zustand with MMKV persist) + server state (TanStack Query with optimistic updates + offline queue), storage tradeoffs (SecureStore / MMKV / AsyncStorage decision table), mutation queue surviving app restart
+- Cognito + Google federation via `expo-auth-session` (PKCE), single-flight 401 refresh, typed `apiClient` matching `aws-cdk-patterns` `ApiResponse<T>`, biometric unlock via `expo-local-authentication`, 409 stale-data UI pattern
+- Push notifications (`expo-notifications` with APNS + FCM, deep-link from payload), OTA updates (`expo-updates` channels), EAS Build + Submit (credentials, secrets, simulator builds for CI), iOS privacy manifests (iOS 17+), Android 13+ `POST_NOTIFICATIONS` runtime flow, Android 14 foreground-service types
+- Expo for web (when viable vs Next.js), `Platform.select` patterns, responsive layouts, NativeWind vs StyleSheet tradeoffs, PWA manifest + service worker
+- Performance — Hermes, new architecture (Fabric + TurboModules) status, `FlashList` over `FlatList`, `react-native-reanimated` v3 worklets, `expo-image` caching, bundle-size analysis
+- Testing — Jest + React Native Testing Library, MSW (`msw/native`) for network mocks, Maestro (recommended) vs Detox for E2E, CI workflow with type-check + lint + unit + preview-build E2E
+- i18n with `expo-localization` + `i18next` + ICU, RTL handling, accessibility APIs (`accessibilityLabel` / `Role` / `State`), VoiceOver + TalkBack testing checklist, `eslint-plugin-react-native-a11y`
+- Observability — Sentry (crashes + JS errors + perf + session replay) with source maps via EAS, privacy scrubbing, PostHog for analytics with `noun_verb` event taxonomy, release health tracking
+- Monetization — RevenueCat default (entitlements + offerings + server-side receipt validation + webhooks), paywall deep links, restore purchases, subscription-management deep links, webhook → Lambda → DynamoDB entitlement provisioning (cross-references `aws-cdk-patterns` + `dynamodb-design`)
+- Gotchas catalog (80 rows) across architecture / navigation / state / auth / native / web / performance / i18n-a11y / observability / monetization themes
+
+Test with the harness in `plugins/dev-patterns/skills/expo-react-native/scripts/` (RED/GREEN scenarios same pattern as `dynamodb-design`).
+
 ## Installation
 
 This plugin is part of the `claude-skills` marketplace. Install via Claude Code plugin marketplace or clone the repo and point Claude Code at the plugin directory.
@@ -94,6 +131,18 @@ Each skill ships with its own RED/GREEN test harness. Pick the variant for your 
 
 ```bash
 ./plugins/dev-patterns/skills/dynamodb-design/scripts/test-skill.sh
+```
+
+**`expo-react-native` — Windows (PowerShell 7+):**
+
+```powershell
+.\plugins\dev-patterns\skills\expo-react-native\scripts\test-skill.ps1
+```
+
+**`expo-react-native` — Mac / Linux / Git Bash:**
+
+```bash
+./plugins/dev-patterns/skills/expo-react-native/scripts/test-skill.sh
 ```
 
 All variants run the same two phases for every scenario in the matching `tests/scenarios.txt`:
