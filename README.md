@@ -7,7 +7,7 @@ Personal marketplace of plugins, skills, and commands for Claude Code.
 | Plugin | Description | Components |
 |--------|-------------|------------|
 | **[deepagents-builder](plugins/deepagents-builder)** | Build AI agents with LangChain's DeepAgents | 6 skills, 14 commands, 6 agents |
-| **[dev-patterns](plugins/dev-patterns)** | Cross-cutting reference patterns for common tech stacks (AWS CDK + DynamoDB design) | 2 skills |
+| **[dev-patterns](plugins/dev-patterns)** | Cross-cutting reference patterns for common tech stacks (AWS CDK + DynamoDB design + Expo / React Native) | 3 skills |
 | **[digital-marketing](plugins/digital-marketing)** | Digital marketing campaigns with Chrome automation | 1 skill |
 | **[linkedin-ai-voice](plugins/linkedin-ai-voice)** | LinkedIn AI thought leadership content | 1 skill |
 
@@ -74,13 +74,16 @@ Build production-ready AI agents with LangChain's DeepAgents framework. Follows 
 
 Reference patterns and gotchas for common tech stacks. Progressive disclosure: a lean `SKILL.md` routes Claude to detailed reference files loaded only when needed.
 
-**Skills (2):**
+**Skills (3):**
 - `aws-cdk-patterns` — Opinionated architecture for AWS CDK v2 in TypeScript. Hexagonal Lambdas inside DDD modules, two-stack backend/frontend split, construct patterns for serverless APIs, Cognito with Google federated identity, S3 + CloudFront SPA hosting, Aurora Serverless v2 (scale-to-zero) and DynamoDB runtime patterns (atomic uniqueness with `TransactWriteCommand`, identity-verified updates, cursor pagination), shared utilities (`parseBody`, `withCors`, `validateEnv`, secrets loading with cold-start cache), a deploy workflow (pre-deploy checklist, stage/suffix system, CloudFront domain registration), and a gotchas catalog.
 - `dynamodb-design` — Stack-agnostic methodology for designing DynamoDB schemas from access patterns. Six-step design process (inventory → classify → base keys → GSIs → validate → single-vs-multi) with greenfield/extension/migration branches, partition and sort key design, GSI projection-cost tradeoffs, adjacency list and hierarchical patterns, hot-partition mitigation (write sharding), item-size limits and S3 offload, cost modeling, optimistic locking, atomic and sharded counters, batch-ops `UnprocessedItems` retry, `TransactWriteCommand` beyond uniqueness, DynamoDB Streams with idempotent Lambda consumers and DynamoDB Streams vs EventBridge Pipes decision tree, schema evolution without downtime (add/remove GSI, attribute rename, single↔multi splits with dual-write + shadow reads), local testing (DynamoDB Local, testcontainers, LocalStack), and a gotchas catalog. Cross-references `aws-cdk-patterns/04-database.md` for the three canonical runtime patterns with full TypeScript.
+- `expo-react-native` — End-to-end patterns for Expo / React Native apps in TypeScript. Managed workflow with dev client escape hatch, DDD feature-slice architecture, navigation with Expo Router (typed routes, deep linking, auth-gated stacks), state and data (Zustand + TanStack Query, MMKV persistence, offline-first sync), auth and networking (Cognito Hosted UI with `expo-auth-session` + PKCE, secure token storage, API client patterns integrating `aws-cdk-patterns` backend + `dynamodb-design` pagination), native modules and EAS Build/Submit release workflow (channels, OTA updates, provisioning), cross-platform web target (Metro + RN Web, shared vs platform-split components), performance and testing (FlatList tuning, Reanimated 3, Jest + React Native Testing Library, Maestro E2E, Detox tradeoffs), i18n and accessibility (`i18n-js`, RTL, screen reader support), observability (Sentry, analytics, crash-free sessions), monetization (RevenueCat, store compliance), and a gotchas catalog. Cross-references `aws-cdk-patterns/02-auth-stack.md` and `dynamodb-design/01-modeling.md` for backend contracts.
 
 **Reference files — `aws-cdk-patterns` (7):** `00-architecture`, `01-serverless-api`, `02-auth-stack`, `03-static-site`, `04-database`, `05-shared-utilities`, `06-deploy-workflow`
 
 **Reference files — `dynamodb-design` (8):** `00-methodology`, `01-modeling`, `02-scaling`, `03-write-correctness`, `04-streams-cdc`, `05-evolution`, `06-testing-local-dev`, `07-gotchas`
+
+**Reference files — `expo-react-native` (11):** `00-architecture`, `01-navigation`, `02-state-and-data`, `03-auth-and-networking`, `04-native-and-release`, `05-cross-platform-web`, `06-performance-and-testing`, `07-i18n-and-accessibility`, `08-observability`, `09-monetization`, `10-gotchas`
 
 ### digital-marketing
 
