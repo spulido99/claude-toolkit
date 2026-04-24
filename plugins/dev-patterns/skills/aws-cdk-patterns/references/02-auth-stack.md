@@ -35,6 +35,8 @@ Cognito is used as a token broker in front of Google. Users never hold a Cognito
 
 Callback URLs are per-environment and must be registered in `callbackUrls` at CDK synth time. The CDK context pattern (`cdk.json` keyed by stage) provides those URLs; see `03-static-site.md` for the canonical shape. Hard-coding callback URLs in the construct makes the pool unusable in any other environment.
 
+**Mobile consumer:** For the Expo / React Native client that integrates with this Cognito pool (PKCE flow, refresh handling, SecureStore token cache), see `../../expo-react-native/references/03-auth-and-networking.md`.
+
 ## Section 2: Template — `CognitoConstruct`
 
 ```typescript
