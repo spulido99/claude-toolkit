@@ -36,20 +36,22 @@ Exit.
 
 ### Step 2: Score Each Tool (10-Principle Checklist)
 
-For each tool, check these patterns statically (no execution needed):
+The **[Tool Quality Checklist](../skills/tool-design/references/tool-quality-checklist.md)** is the authoritative source for what each principle means and which are critical — this step does not restate the principles. It only encodes the **static-analysis pass condition** that turns each principle into one point of the 0–10 score. If a principle's definition changes, update the checklist first, then sync the matching pass condition below.
 
-| # | Principle | Check | Pass Condition |
-|---|-----------|-------|----------------|
-| 1 | Semantic name | Function name pattern | Not bare `get_`, `post_`, `update_`, `delete_` prefix without domain |
-| 2 | Trigger phrases | Docstring content | Contains "when the user says" or multiple quoted trigger phrases |
-| 3 | Structured types | Parameter types | Money params use `dict` not `float`; dates mention ISO format |
-| 4 | Actionable errors | Return statements | Error returns include `code` and `remediation` fields |
-| 5 | Consistent terminology | Cross-tool comparison | Same param names across tools in same domain (e.g., always `account_id` not mixed) |
-| 6 | Standard response | Return structure | Returns dict with `data`, `formatted`, `available_actions`, `message_for_user` |
-| 7 | Tool graph | available_actions | `available_actions` present in return value |
-| 8 | Operation level | Docstring declaration | Docstring contains `Operation Level:` |
-| 9 | Confirmation flow | Return for L3+ | Level 3+ tools return `pending_confirmation` |
-| 10 | Idempotency | Parameters for L3+ | Level 3+ tools accept `idempotency_key` parameter |
+For each tool, award one point per principle whose pass condition holds (static analysis, no execution needed):
+
+| # | Principle | Static-analysis pass condition |
+|---|-----------|--------------------------------|
+| 1 | Semantic name | Function name is not a bare `get_`/`post_`/`update_`/`delete_` prefix without a domain noun |
+| 2 | Trigger phrases | Docstring contains "when the user says" or multiple quoted trigger phrases |
+| 3 | Structured types | Money params use `dict` not `float`; date params mention ISO format |
+| 4 | Actionable errors | Error returns include `code` and `remediation` fields |
+| 5 | Consistent terminology | Same param names across tools in the same domain (e.g. always `account_id`, not mixed) |
+| 6 | Standard response | Returns a dict with `data`, `formatted`, `available_actions`, `message_for_user` |
+| 7 | Tool graph | `available_actions` present in the return value |
+| 8 | Operation level | Docstring contains `Operation Level:` |
+| 9 | Confirmation flow | Level 3+ tools return `pending_confirmation` |
+| 10 | Idempotency | Level 3+ tools accept an `idempotency_key` parameter |
 
 Score: count of passing checks out of 10.
 
@@ -96,3 +98,8 @@ Improvement Suggestions:
     - Missing: available_actions in response (Principle 7)
     - Missing: Operation level declaration (Principle 8)
 ```
+
+## References
+
+- **[AI-Friendly Tool Design](../skills/tool-design/SKILL.md)** — The 10 principles this dashboard scores against.
+- **[Tool Quality Checklist](../skills/tool-design/references/tool-quality-checklist.md)** — Full, authoritative quality verification checklist.
