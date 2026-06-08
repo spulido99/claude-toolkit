@@ -5,7 +5,37 @@ description: This skill should be used when the user asks to "design tools", "cr
 
 # AI-Friendly Tool Design
 
-Design tools that agents can discover, understand, and compose effectively. These 10 principles bridge API design with agent-native architecture to produce tools that work seamlessly in LLM-driven workflows.
+Design tools that agents can discover, understand, and compose effectively. These **11 principles** bridge API design with agent-native architecture to produce tools that work seamlessly in LLM-driven workflows.
+
+## Three Levels of Design
+
+Tool design decisions live at three distinct levels of abstraction. The 11 numbered principles below all operate at the **tool level** (how to design a single tool). Two other levels are covered separately and are **not** part of the per-tool quality score:
+
+| Level | Question it answers | Where it lives |
+|-------|--------------------|----------------|
+| **Tool** | How do I design one good tool? | Principles 1–11 (below) |
+| **Catalog** | Which tools exist, at what size, grouped how? | [Catalog-Level Design](#catalog-level-design) — Granularity, Bounded Contexts, Parity |
+| **Format** | How does a tool serialize to a protocol? | [MCP Generation Pattern](#mcp-generation-pattern) |
+
+### Where these principles come from
+
+The 11 tool-level principles are the union of two source references, made traceable here:
+
+| # | Principle | Source |
+|---|-----------|--------|
+| 1 | Semantic Clarity over CRUD | `ai-friendly` #1 (Semantic Clarity) |
+| 2 | Natural Language Compatibility | `ai-friendly` #2 (Docs for LLMs) + #3 (Search-First) |
+| 3 | Structured Types with JSON Schema | `ai-friendly` #5/#6 (format standards, MCP types) |
+| 4 | Actionable Error Responses | `ai-friendly` #4 (Error Design) |
+| 5 | Consistent Terminology | `ai-friendly` #5 (Consistency) |
+| 6 | Rich Response Semantics | `agent-native` #4 (Rich Semantics) |
+| 7 | Available Actions (Tool Graph) | `agent-native` #1 (Available Actions) |
+| 8 | Operation Levels | `agent-native` #2 (Operation Levels) |
+| 9 | Delegated Confirmations | `agent-native` #3 (Delegated Confirmations) |
+| 10 | Idempotency Keys | `agent-native` #5 (Idempotency) |
+| 11 | Secure Parameters | `tool-patterns` (ToolRuntime) + checklist (Security) |
+
+The remaining source principles are **catalog-level**, not tool-level: **Bounded Contexts** (`agent-native` #6) and **Parity** (`agent-native` #7), joined by **Granularity** (new — it resolves the gap between atomic primitives and workflow-shaped tools). **MCP Alignment** (`ai-friendly` #6) is the format level. See [Catalog-Level Design](#catalog-level-design).
 
 ## Principle 1: Semantic Clarity Over CRUD
 
@@ -40,6 +70,8 @@ def get_account_balances(account_id: str) -> dict:
 | `post_data` | `submit_loan_application` | Describes business intent |
 | `update_record` | `change_shipping_address` | Clear user-facing action |
 | `delete_item` | `cancel_subscription` | Domain-specific consequence |
+
+**Casing:** tool names — **and their parameters and response fields** — are all `snake_case` (`loans_simulate`, `installments_quantity`), never camelCase (`installmentsQuantity`) or Header-Case (`Incognia-Request-Token`). This is mechanical: enforce it with a linter, not judgment. The terminology consistency in Principle 5 rides on top of this casing rule.
 
 ## Principle 2: Natural Language Compatibility
 
@@ -231,6 +263,8 @@ Use **one term per concept** across all tools. Inconsistent naming forces the ag
 | Pagination cursor | `cursor` | `page_token`, `next_id`, `offset` |
 | Search query | `query` | `q`, `search_term`, `keyword` |
 | Sort order | `sort_by`, `sort_order` | `order`, `ordering`, `sort_field` |
+
+**Casing:** every parameter **and response field** name is `snake_case` — `installments_quantity` not `installmentsQuantity`, `request_token` not `Request-Token`. Mixed casing forces the agent to track variants and raises parameter-error rates. (Tool names follow the same rule — Principle 1.)
 
 ### Enforcement Pattern
 
@@ -602,6 +636,75 @@ def process_refund(
 | Collision behavior | Return original result, do NOT execute again |
 | Agent responsibility | Generate key before first call, reuse on retries |
 
+## Principle 11: Secure Parameters
+
+Tool parameters are **fully controllable by the LLM** — it can pass any value to any parameter. Therefore **no secret, credential, token, or caller identity may be a parameter.** These are injected by the framework, invisible to the model.
+
+This is a **trust-boundary** principle, independent of data typing (Principle 3): even a perfectly typed `user_id: str` is unsafe as a parameter, because the agent could pass *any* user's ID and read their data. Principle 3 asks "is this value well-typed?"; Principle 11 asks "is the agent allowed to choose this value at all?"
+
+### What never goes in a parameter
+
+| Never a parameter | Why | Inject instead via |
+|-------------------|-----|--------------------|
+| Caller identity: `user_id`, `customer_id`, `tenant_id` | Agent could impersonate any user / cross tenants | Auth context (`x-claims`, `ToolRuntime`) |
+| Credentials: `api_key`, `token`, `secret`, `password` | Logged or leaked through the model | Framework credentials |
+| Fraud/anti-abuse tokens (e.g. device attestation) | Spoofable if the model controls them | Framework / gateway header |
+
+Business identifiers the agent legitimately **discovers and passes** (an `account_id` returned by a search tool, a `request_id` from a draft) are fine. The distinction is **caller identity / credentials vs. operands**.
+
+```python
+# Bad: identity, credential, and fraud token as parameters — the LLM controls them
+@tool
+def disburse_loan(request_id: str, user_id: str, incognia_token: str) -> dict:
+    ...
+
+# Good: only the operand is a parameter; identity + fraud token injected by framework
+from langchain.tools import tool, ToolRuntime
+
+@tool
+def loans_disburse(
+    request_id: str,
+    idempotency_key: str,
+    runtime: ToolRuntime[SecureContext],  # invisible to LLM: person_code, fraud token
+) -> dict:
+    """Disburse a confirmed Mini Loan. Operation Level: 4 (Financial)."""
+    person_code = runtime.context.person_code  # from x-claims, not a parameter
+    ...
+```
+
+**MCP note:** in an MCP server this means identity/credentials/fraud tokens are **never** fields in `inputSchema` — they arrive as gateway headers (e.g. Kong's `x-claims`) and are bound to the request server-side. If it is in `inputSchema`, the model can forge it.
+
+See [Tool Patterns — Security with ToolRuntime](../patterns/references/tool-patterns.md) for the full injection pattern.
+
+## Catalog-Level Design
+
+Three decisions shape the catalog as a whole — distinct from designing any single tool. They are **not scored per-tool** because they require judgment, not static checks.
+
+### Granularity — one tool = one unit of user intent
+
+Size a tool to a **unit of user intent or decision**, not to a backend endpoint or an internal step. Two failure modes pull in opposite directions:
+
+| Failure | Symptom | Fix |
+|---------|---------|-----|
+| **Over-fragmented** | Two tools are always called in sequence and the intermediate result has no standalone use to the agent (e.g. a `request_id` you can only pass to the next call) | **Merge** them into one tool |
+| **Over-bundled** | One tool hides steps the agent would want to compose, skip, retry, or recover from independently (validate → check stock → pay) | **Split** into atomic primitives ([Anti-Pattern 13](../patterns/references/anti-patterns.md)) |
+
+These two pulls are not in conflict — they answer different questions:
+
+- **Composability (Anti-Pattern 13):** *Am I hiding a primitive the agent needs to drive its own flow?* If yes → keep separate.
+- **Granularity (this principle):** *Is this intermediate step a real user decision, or an artifact of how the backend is split?* If artifact → merge.
+
+> Merging two backend endpoints behind one tool does **not** violate Anti-Pattern 13. #13 forbids hiding decision points the agent needs; it does not require exposing every internal step. The natural seam is the `pending_confirmation` boundary (Principle 9): everything up to "ready to execute" is usually **one** *prepare* tool, and execution is **one** *execute* tool — no matter how many endpoints sit behind each.
+
+**Example:** `loans_create_request` (returns a bare `request_id`) + `loans_confirm_request` (computes the final terms) should be **one** `loans_prepare_request` tool that returns `pending_confirmation` — the `request_id` alone is never a useful stopping point for the agent.
+
+### Bounded Contexts & Parity
+
+The other two catalog decisions are detailed below and in the checklist:
+
+- **Bounded Contexts** — group tools by business domain, max 10 per domain. See [Tool Organization by Domain](#tool-organization-by-domain) below (`agent-native` #6).
+- **Parity** — every UI action has a corresponding tool, or a documented intentional exclusion. See the Coverage section of the [Tool Quality Checklist](references/tool-quality-checklist.md) (`agent-native` #7).
+
 ## Tool Organization by Domain
 
 Organize tools into **domain modules** for maintainability and discoverability.
@@ -696,7 +799,7 @@ agent = create_deep_agent(
 
 ## Python Generation Pattern
 
-Full template for generating a Python tool with all 10 principles applied.
+Full template for generating a Python tool with all 11 principles applied.
 
 ```python
 from langchain.tools import tool
@@ -842,6 +945,13 @@ Quick self-check:
 - [ ] Operation level is declared and mapped to `interrupt_on` (Principle 8)
 - [ ] Level 3+ tools return pending_confirmation first (Principle 9)
 - [ ] Transactional tools accept idempotency_key (Principle 10)
+- [ ] No identity/credentials/tokens as parameters — injected by framework (Principle 11)
+
+Catalog-level (judgment, not part of the per-tool score):
+
+- [ ] Each tool is one unit of user intent — no over-fragmented or workflow-shaped tools (Granularity)
+- [ ] Tools grouped by domain, ≤10 per domain (Bounded Contexts)
+- [ ] Every UI action has a tool or a documented exclusion (Parity)
 
 ## Workflow
 
@@ -855,7 +965,7 @@ The tool design workflow follows a design-build-validate cycle:
 
 1. **Design**: `/design-tools` creates a tool catalog from requirements or APIs
 2. **Extend**: `/add-tool` adds individual tools matching existing patterns
-3. **Validate**: `/tool-status` checks quality scores against the 10 principles + eval coverage
+3. **Validate**: `/tool-status` checks quality scores against the 11 principles + eval coverage
 4. **Test**: `/design-evals` creates eval scenarios for your tools (EDD)
 
 ## Commands

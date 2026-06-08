@@ -31,7 +31,7 @@ When your agent needs new capabilities:
 /design-tools                              → Full catalog from scratch
 /add-tool                                  → Add one tool interactively
 /add-tool --from-api api/openapi.yaml#/endpoint  → Convert an API endpoint
-/tool-status                               → Quality dashboard (10-principle scores + eval coverage)
+/tool-status                               → Quality dashboard (11-principle scores + eval coverage)
 ```
 
 The workflow cycles: design tools → check quality → fix issues → add eval scenarios.
@@ -86,7 +86,7 @@ As the agent grows, assess its architecture and evolve it:
 | **quickstart** | Getting started with DeepAgents | `/new-sdk-app`, `/design-agent` |
 | **architecture** | Agent topologies and bounded contexts | `/design-topology`, `/add-subagent` |
 | **patterns** | System prompts, tool design, anti-patterns | — |
-| **tool-design** | AI-friendly tool design (10 principles) | `/design-tools`, `/add-tool`, `/tool-status` |
+| **tool-design** | AI-friendly tool design (11 principles) | `/design-tools`, `/add-tool`, `/tool-status` |
 | **evals** | Evals-Driven Development workflow | `/design-evals`, `/eval`, `/add-scenario`, `/eval-status`, `/eval-update` |
 | **evolution** | Maturity model and refactoring | `/assess`, `/evolve` |
 
@@ -130,14 +130,14 @@ As the agent grows, assess its architecture and evolve it:
 | Command | Description |
 |---------|-------------|
 | `/validate-agent` | Check agent code for anti-patterns and security issues |
-| `/tool-status` | Tool quality dashboard (10-principle scoring + eval coverage) |
+| `/tool-status` | Tool quality dashboard (11-principle scoring + eval coverage) |
 | `/assess` | Architecture maturity assessment (80-point, 4 categories) |
 | `/evolve` | Guided refactoring to next maturity level |
 
 ## Key References
 
 - `skills/patterns/references/api-cheatsheet.md` — Canonical API reference for `create_deep_agent`
-- `skills/tool-design/references/tool-quality-checklist.md` — 10-principle quality checklist for tools
+- `skills/tool-design/references/tool-quality-checklist.md` — 11-principle quality checklist for tools
 - `skills/evolution/references/maturity-model.md` — Complete 5-level maturity model
 - `skills/evolution/references/refactoring-patterns.md` — 9 refactoring patterns
 

@@ -1,6 +1,6 @@
 ---
 name: design-tools
-description: Design an AI-friendly tool catalog from scratch. Detects agent code, discovers requirements, then generates tools following the 10 principles.
+description: Design an AI-friendly tool catalog from scratch. Detects agent code, discovers requirements, then generates tools following the 11 principles.
 allowed-tools:
   - Read
   - Write

@@ -165,7 +165,7 @@ After the report, add:
 
 ```
 For deeper analysis:
-  /tool-status — Per-tool quality scores (10-principle checklist + eval coverage)
+  /tool-status — Per-tool quality scores (11-principle checklist + eval coverage)
   /assess      — Full 80-point maturity assessment with next-level path
   /evolve      — Guided refactoring to improve architecture
 ```

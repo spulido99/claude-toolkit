@@ -8,6 +8,7 @@ Use this checklist to verify every tool before shipping. Each section maps to pr
 
 - [ ] Tool name describes a **domain operation**, not a CRUD verb or HTTP method (`get_account_balances` not `get_resource`)
 - [ ] Tool name uses **snake_case** consistently (`transfer_funds` not `transferFunds` or `TransferFunds`)
+- [ ] **Every parameter and response field** uses snake_case too (`installments_quantity` not `installmentsQuantity`; `request_token` not `Request-Token`) — not just the tool name
 - [ ] **One term per concept** across the entire tool catalog (always `account_id`, never `acct_id` or `account_number` in some tools)
 - [ ] No abbreviations or acronyms in names unless universally understood (`get_account_balances` not `get_acct_bal`)
 
@@ -27,7 +28,7 @@ Use this checklist to verify every tool before shipping. Each section maps to pr
 - [ ] Money amounts use the **structured format**: `{"value": decimal, "currency": "ISO 4217"}` — never bare floats
 - [ ] Dates use **ISO 8601** format (`YYYY-MM-DD`) — never locale-specific formats
 - [ ] Parameters have **sensible defaults** where applicable (`limit: 20`, `include_details: false`, `date_from: 30 days ago`)
-- [ ] No **secrets, tokens, or credentials** passed as parameters — authentication is handled at the framework level
+- [ ] No **secrets, tokens, credentials, or caller identity** (`user_id`, `customer_id`, `tenant_id`) passed as parameters — identity and auth are framework-injected and never LLM-controllable (Principle 11)
 - [ ] All enum parameters are **documented with allowed values** in the description and schema (`status: Literal["active", "suspended", "closed"]`)
 
 ---
@@ -56,6 +57,7 @@ Use this checklist to verify every tool before shipping. Each section maps to pr
 - [ ] Domain module exports a **`TOOLS` list** for easy registration with the agent framework
 - [ ] Tool has **max 15 parameters** — if more are needed, split into multiple tools or use nested objects
 - [ ] Domain has **max 10 tools** — if more are needed, split into sub-domains
+- [ ] Tool is **one unit of user intent** (Granularity) — not two steps that always run together with a useless intermediate (merge), and not a workflow hiding composable steps (split)
 
 ---
 
@@ -79,7 +81,9 @@ Use this checklist to verify every tool before shipping. Each section maps to pr
 | Operation level assigned | Operation Levels | Yes |
 | Pending confirmation for L3+ | Delegated Confirmations | Yes |
 | Idempotency key for L3+ | Idempotency | Yes |
+| No identity/credentials as parameters | Parameter Security (P11) | Yes |
 | No sensitive data in response | Security | Yes |
 | Search tools per entity | Search-First | Recommended |
 | Voice-optimized format | Rich Semantics | Recommended |
 | Batch operations | Coverage | Recommended |
+| Right-sized granularity | Granularity (catalog) | Recommended |
