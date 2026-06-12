@@ -114,6 +114,8 @@ Los 11 principios siguientes cubren cómo diseñar bien cada uno de estos elemen
 
 ## Principio 1: Claridad semántica, no CRUD
 
+> **Por qué es importante:** el nombre es lo primero —y a veces lo único— que el modelo lee para elegir entre decenas de tools (paso 3 del ciclo). No hay un compilador que avise si elige mal: simplemente llama a la equivocada y el usuario recibe una respuesta incorrecta sin que nadie lo note. Con 5 tools `get_*` genéricas, el modelo *adivina* cuál usar; con nombres que dicen exactamente qué hacen, acierta a la primera. El nombre es tu mecanismo de routing.
+
 Nombra las tools por **operación de dominio**, no por método HTTP ni patrón CRUD. El agente selecciona la tool por su nombre y descripción — los nombres genéricos causan confusión y selección incorrecta.
 
 | Nombre malo | Nombre bueno | Por qué |
@@ -130,6 +132,8 @@ Nombra las tools por **operación de dominio**, no por método HTTP ni patrón C
 ---
 
 ## Principio 2: Compatibilidad con lenguaje natural
+
+> **Por qué es importante:** el usuario no habla en nombres de función — dice "¿cuándo pagué el arriendo?", no "invoca search_transactions". El modelo tiene que **tender el puente** entre esa frase y tu tool, y lo hace comparando el texto del usuario con tu descripción. Si pones las frases reales que diría el usuario en la descripción, el match es directo. Y si tu única vía de entrada es un ID interno que el usuario nunca conoce, el agente se queda atascado: no tiene de dónde sacarlo. Las tools de búsqueda son la puerta de entrada a todo el catálogo.
 
 Las tools deben ser descubribles a través del lenguaje que los usuarios realmente hablan.
 
@@ -180,6 +184,8 @@ Diseña tools para que el agente encuentre entidades por **nombre o alias**, no 
 
 ## Principio 3: Tipos estructurados con JSON Schema
 
+> **Por qué es importante:** el modelo **genera** los argumentos (paso 4 del ciclo), y rellena cualquier hueco que dejes con lo que le parezca más probable. Un `amount: number` no le dice si son dólares o pesos, dólares o centavos — y va a *suponer*. Cada restricción que escribes en el schema (`enum`, `pattern`, `minimum`, `format`) es una decisión que le quitas de las manos y un error que se vuelve imposible. El schema no es documentación: es la barrera de contención. Lo que no restrinjas, el modelo lo improvisa.
+
 Usa **tipos explícitos y restricciones** en el `inputSchema` en lugar de strings libres. Esto previene errores del agente y permite validar antes de ejecutar.
 
 ```json
@@ -221,6 +227,8 @@ Aprovecha todo lo que JSON Schema te da: `pattern`, `enum`, `minimum`/`maximum`,
 ---
 
 ## Principio 4: Errores accionables
+
+> **Por qué es importante:** en una API REST el error lo maneja código con `try/catch`. Aquí lo "maneja" el modelo *leyéndolo* y decidiendo qué hacer. `{"error": "not found"}` no le da nada con qué decidir, así que hace lo peor posible: reintenta lo mismo —a veces en bucle, quemando tokens y tiempo— o le inventa una excusa al usuario. Un error que dice *qué pasó* y *qué hacer ahora* (con tools concretas que sugerir) convierte un callejón sin salida en el siguiente paso del flujo. El error es una instrucción de recuperación, no un reporte de fallo.
 
 Cuando una tool falla, la respuesta debe decirle al agente **qué salió mal y qué hacer a continuación**. Nunca devuelvas strings de error pelados.
 
@@ -271,6 +279,8 @@ Cuando una tool falla, la respuesta debe decirle al agente **qué salió mal y q
 
 ## Principio 5: Terminología consistente
 
+> **Por qué es importante:** el modelo trata el catálogo entero como un solo texto y aprende patrones de él. Si una tool devuelve `account_id` y otra lo pide como `acct_id`, el modelo tiene que *inferir* que son lo mismo — y a veces falla: pasa el valor al campo equivocado o se inventa el formato. Cada sinónimo es una oportunidad de error que tú creaste gratis. Un término por concepto hace que la salida de una tool encaje sin fricción en la entrada de la siguiente. La consistencia no es prolijidad: es lo que hace que las tools se compongan.
+
 Usa **un solo término por concepto** en todo el catálogo de tools. Los nombres inconsistentes obligan al agente a aprender sinónimos y aumentan el riesgo de alucinación.
 
 | Concepto | Usar siempre | Nunca usar |
@@ -311,6 +321,8 @@ Usa **un solo término por concepto** en todo el catálogo de tools. Los nombres
 ---
 
 ## Principio 6: Respuestas con semántica rica
+
+> **Por qué es importante:** lo que devuelves es lo único que el modelo "ve" del resultado — y todo lo que no le des, lo va a reconstruir solo, gastando tokens y arriesgando errores. Si devuelves solo datos crudos, el modelo tiene que formatear las cifras él mismo (y puede equivocarse con un número), redactar el mensaje al usuario desde cero y deducir el siguiente paso. Si le das el texto ya formateado, el mensaje sugerido y los datos estructurados juntos, ahorras una ronda de razonamiento entera y reduces la alucinación. La respuesta no es un volcado de la base de datos: es un brief para el agente.
 
 Toda respuesta debe incluir suficiente contexto para que el agente **actúe sobre el resultado sin llamadas adicionales**. Usa un envelope estándar:
 
@@ -355,6 +367,8 @@ Toda respuesta debe incluir suficiente contexto para que el agente **actúe sobr
 
 ## Principio 7: Available actions (grafo de tools)
 
+> **Por qué es importante:** en una app tradicional, tú escribes el código que encadena "ver saldo → transferir → confirmar". Con un agente no hay ese código: el modelo decide el siguiente paso solo, razonando desde cero después de cada llamada. Eso es lento, caro y propenso a que se pierda o invente un paso. Si cada respuesta trae los próximos pasos válidos —con los parámetros ya rellenados—, le das un mapa en vez de obligarlo a explorar a ciegas. Es la diferencia entre orquestar el flujo en tus respuestas o rezar para que el modelo lo deduzca cada vez.
+
 Toda respuesta **debe** incluir `available_actions`: una lista de próximos pasos lógicos. Esto crea un **grafo navegable** que guía al agente a través de workflows multi-paso sin orquestación hardcodeada.
 
 Sin available actions, el agente debe razonar desde cero qué hacer después de cada llamada — más latencia, más tokens, más errores. Con ellas, tiene un menú curado de pasos contextualmente apropiados.
@@ -395,6 +409,8 @@ Cada acción incluye: `tool` (nombre exacto), `params` (pre-rellenados con lo qu
 
 ## Principio 8: Niveles de operación
 
+> **Por qué es importante:** un agente es **autónomo** — puede decidir llamar a `transfer_funds` sin que un humano apriete un botón. Eso es justo lo poderoso y lo peligroso. Sin una clasificación de impacto, leer un saldo y vaciar una cuenta se tratan igual, y el modelo (que es manipulable por el texto del usuario) podría ejecutar algo irreversible por su cuenta. Etiquetar cada tool con su nivel le dice al cliente MCP *cuándo frenar y pedir aprobación humana*. Es el freno de mano de la autonomía: define dónde el agente puede actuar solo y dónde no.
+
 Clasifica toda tool por su **nivel de impacto** para determinar qué confirmación requiere. Esta clasificación es la base de la operación autónoma segura.
 
 | Nivel | Categoría | Descripción | Confirmación | Ejemplo |
@@ -426,6 +442,8 @@ Clasifica toda tool por su **nivel de impacto** para determinar qué confirmaci�
 ---
 
 ## Principio 9: Confirmaciones delegadas
+
+> **Por qué es importante:** el modelo puede malinterpretar al usuario o ser manipulado para actuar. Si una sola llamada *ejecuta* algo con consecuencias (mover dinero, borrar datos), no hay vuelta atrás cuando se equivoca. Partir la operación en dos —*preparar* (que solo devuelve los detalles para revisar) y *ejecutar* (que corre tras la aprobación)— crea un punto de control donde un humano ve exactamente qué va a pasar antes de que pase. El agente nunca tiene en sus manos un botón de "hazlo ya" para lo irreversible. Separas *decidir* de *ejecutar*, y metes al humano justo en medio.
 
 Las operaciones de **Nivel 3 en adelante** no deben ejecutarse inmediatamente. La tool devuelve `pending_confirmation` con los detalles completos, el agente los presenta al usuario, y la ejecución real ocurre en una **segunda tool** tras la aprobación.
 
@@ -486,6 +504,8 @@ Las operaciones de **Nivel 3 en adelante** no deben ejecutarse inmediatamente. L
 
 ## Principio 10: Llaves de idempotencia
 
+> **Por qué es importante:** un agente reintenta de formas que el código humano no. Un timeout de red, un error que malinterpretó, o simplemente un bucle de razonamiento pueden hacer que llame a `transfer_funds` dos o tres veces para la *misma* intención del usuario. Sin protección, eso son dos o tres transferencias reales. La llave de idempotencia le dice al backend "esta es la misma operación que ya viste, devuelve el resultado anterior y no la ejecutes de nuevo". Es tu red de seguridad contra la naturaleza repetitiva e impredecible de un agente. Asume que toda llamada con efectos *va* a repetirse.
+
 Toda tool **transaccional** (Nivel 3+) debe aceptar un parámetro `idempotency_key` para prevenir ejecución duplicada por reintentos, fallos de red o loops del agente.
 
 ### Cómo funciona
@@ -516,6 +536,8 @@ Toda tool **transaccional** (Nivel 3+) debe aceptar un parámetro `idempotency_k
 ---
 
 ## Principio 11: Parámetros seguros
+
+> **Por qué es importante:** este es el error de seguridad más fácil de cometer y el más caro. El modelo controla *todos* los parámetros y es manipulable por el texto del usuario (*prompt injection*: un usuario malicioso escribe algo que convence al agente de hacer lo que no debe). Si `user_id` es un parámetro, basta con que el atacante diga "ahora consulta los datos del usuario 4815" para que el agente le entregue datos ajenos — porque para él es solo otro valor que rellenar. La identidad y las credenciales **nunca** pueden depender de algo que el modelo escribe; tienen que venir de la capa de transporte autenticada, donde el modelo no las puede tocar. Regla simple: si está en `inputSchema`, considéralo falsificable.
 
 Los parámetros de una tool son **totalmente controlables por el LLM** — puede pasar cualquier valor a cualquier parámetro. Por lo tanto, **ningún secreto, credencial, token ni identidad del llamador puede ser un parámetro.** Eso se inyecta del lado del servidor, invisible al modelo.
 
