@@ -146,7 +146,7 @@ get_loan_status        →  intención 4 (Nivel 1: Read)
 ```json
 {
   "name": "get_loan_offers",
-  "description": "Get pre-approved loan offers for the current user (max amount, available terms, rates).\n\nOperation Level: 1 (Read)\n\nUse when the user says: \"do I qualify for a loan\", \"how much can I borrow\", \"loan options\", \"necesito un préstamo\", \"¿para cuánto califico?\".",
+  "description": "Get pre-approved loan offers for the current user (max amount, available terms, rates).\n\nOperation Level: 1 (Read)\n\nUse when the user asks what they qualify for — e.g. \"how much can I borrow\", \"loan options\", \"necesito un préstamo\", \"¿para cuánto califico?\".\nDo NOT use for the status of an existing loan (use get_loan_status).",
   "inputSchema": {
     "type": "object",
     "properties": {}
@@ -155,7 +155,7 @@ get_loan_status        →  intención 4 (Nivel 1: Read)
 }
 ```
 
-- **P1/P2:** nombre de dominio + frases gatillo en ambos idiomas → el agente la encuentra desde "necesito un préstamo".
+- **P1/P2:** nombre de dominio + cuándo-usar con frases en ambos idiomas y frontera "Do NOT use" hacia `get_loan_status` → el agente la encuentra desde "necesito un préstamo" y no la confunde con la consulta de estado.
 - **P11:** **no recibe `userId`.** El usuario es el de la sesión autenticada; el servidor lo resuelve desde el contexto del transporte (OAuth/headers del gateway). El modelo no puede pedir las ofertas de otro.
 
 Respuesta:
@@ -172,8 +172,7 @@ Respuesta:
       }
     ]
   },
-  "formatted": "Estás pre-aprobado para hasta $5.000.000 COP, a 6, 12, 18 o 24 meses, con una tasa del 18,5% anual.",
-  "message_for_user": "Estás pre-aprobado para hasta $5.000.000. ¿Por cuánto y a cuántos meses lo quieres?",
+  "formatted": "Estás pre-aprobado para hasta $5.000.000 COP, a 6, 12, 18 o 24 meses, con una tasa del 18,5% anual. ¿Por cuánto y a cuántos meses lo quieres?",
   "available_actions": [
     {
       "tool": "loans_prepare_request",
@@ -185,15 +184,15 @@ Respuesta:
 }
 ```
 
-- **P6:** trae `data` + `formatted` (cifras ya formateadas, el agente no las reconstruye) + `message_for_user`.
-- **P7:** `available_actions` le dice al agente exactamente qué sigue — no tiene que adivinar el flujo.
+- **P6:** trae `data` + `formatted` (cifras ya formateadas, el agente no las reconstruye) — una sola representación de display, sin campos duplicados.
+- **P7:** este `available_actions` es un **nudge curado del backend** — el negocio decidió que tras ver ofertas el paso que vale la pena es preparar. No es repetir el catálogo: es curación del funnel.
 
 #### 2. `loans_prepare_request` — tres endpoints, una intención
 
 ```json
 {
   "name": "loans_prepare_request",
-  "description": "Prepare a loan: calculate installments, rate and total for a given amount and term, and return the final terms for the user to review before disbursing. Does NOT move money.\n\nOperation Level: 1 (Read — only simulates, commits nothing)\n\nUse when the user says: \"quiero un préstamo de X a Y meses\", \"simula un crédito\", \"how much would the payments be\".",
+  "description": "Prepare a loan: calculate installments, rate and total for a given amount and term, and return the final terms for the user to review before disbursing. Does NOT move money.\n\nOperation Level: 1 (Read — only simulates, commits nothing)\n\nUse when the user wants concrete terms — e.g. \"quiero un préstamo de X a Y meses\", \"simula un crédito\", \"how much would the payments be\".\nDo NOT use to execute the disbursement (use loans_disburse with the returned confirmation).",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -242,18 +241,18 @@ Respuesta — fíjate que **no desembolsa**, devuelve `pending_confirmation`:
       "tool": "loans_disburse",
       "params": {
         "loan_request_id": "lreq_abc123",
-        "idempotency_key": "550e8400-e29b-41d4-a716-446655440000"
+        "idempotency_key": "lreq-abc123-k7f3"
       }
     },
     "expires_at": "2026-06-12T15:30:00Z"
   },
-  "formatted": "Préstamo de $1.000.000 a 12 meses:\n- Cuota mensual: $91.680\n- Tasa: 18,5% anual\n- Total a pagar: $1.100.160\n- Se desembolsa a: ACC-12345678",
-  "message_for_user": "Tu préstamo de $1.000.000 a 12 meses queda en cuotas de $91.680 (total $1.100.160). ¿Confirmo el desembolso?"
+  "formatted": "Préstamo de $1.000.000 a 12 meses:\n- Cuota mensual: $91.680\n- Tasa: 18,5% anual\n- Total a pagar: $1.100.160\n- Se desembolsa a: ACC-12345678\n¿Confirmo el desembolso?"
 }
 ```
 
-- **P9:** la tool de preparación **no ejecuta nada irreversible**. Devuelve los términos completos y la "receta" exacta para desembolsar (`confirmation_method`), incluyendo una `idempotency_key` ya generada.
+- **P9:** la tool de preparación **no ejecuta nada irreversible**. Devuelve los términos completos y la "receta" exacta para desembolsar (`confirmation_method`), incluyendo la `idempotency_key` que **emitió el servidor** al preparar — el agente la repetirá tal cual, nunca inventa una (P10).
 - **P6:** el usuario ve exactamente qué va a pasar antes de que pase.
+- **P7:** este es el caso central de `available_actions`/`confirmation_method`: **estado del servidor** (el `lreq_abc123`, su llave y su expiración) que el catálogo jamás podría expresar.
 
 #### 3. `loans_disburse` — la única tool que mueve dinero
 
@@ -271,8 +270,7 @@ Respuesta — fíjate que **no desembolsa**, devuelve `pending_confirmation`:
       },
       "idempotency_key": {
         "type": "string",
-        "format": "uuid",
-        "description": "Unique key to prevent duplicate disbursement. Reuse the one from loans_prepare_request on retries."
+        "description": "The key returned by loans_prepare_request in confirmation_method. Echo it exactly (also on retries) — never generate one."
       }
     },
     "required": ["loan_request_id", "idempotency_key"]
@@ -284,7 +282,7 @@ Respuesta — fíjate que **no desembolsa**, devuelve `pending_confirmation`:
 - **P8:** Nivel 4 declarado en la descripción + `destructiveHint` → el cliente MCP exige aprobación humana explícita del usuario en la conversación antes de ejecutar.
 - **P11:** **no recibe `authToken`** ni `userId`. La autorización viaja por la sesión autenticada; el `loan_request_id` es un operando legítimo que el agente descubrió en el paso anterior.
 - **P5:** el campo se llama `loan_request_id`, no `request_id` a secas — así, si el catálogo también tiene `transfer_request_id` o `support_request_id`, el agente nunca confunde cuál pasa a cuál tool.
-- **P10:** acepta `idempotency_key`. Si la red falla y el agente reintenta, el backend reconoce la llave y devuelve el resultado original — **no desembolsa dos veces**.
+- **P10:** acepta `idempotency_key` — la que emitió el servidor en el paso anterior, no una que el modelo invente (los "UUIDs" muestreados por un LLM son de baja entropía). Si la red falla y el agente reintenta con la misma llave, el backend la reconoce y devuelve el resultado original — **no desembolsa dos veces**.
 
 Respuesta exitosa:
 
@@ -299,7 +297,6 @@ Respuesta exitosa:
     "reference": "REF-2026-0612-001"
   },
   "formatted": "✅ Desembolsado $1.000.000 a la cuenta ACC-12345678. Referencia REF-2026-0612-001. Primer pago: 12 jul 2026.",
-  "message_for_user": "Listo, transferí $1.000.000 a tu cuenta. Tu primer pago es el 12 de julio. Referencia: REF-2026-0612-001.",
   "available_actions": [
     {"tool": "get_loan_status", "params": {"loan_id": "loan_xyz789"}, "label": "Ver estado del préstamo"},
     {"tool": "get_account_balances", "params": {"account_id": "ACC-12345678"}, "label": "Ver saldo actualizado"}
@@ -313,7 +310,7 @@ Y la respuesta ante un reintento con la misma llave (P10 en acción):
 {
   "status": "already_processed",
   "data": { "loan_id": "loan_xyz789", "reference": "REF-2026-0612-001" },
-  "message_for_user": "Este desembolso ya se procesó. Referencia: REF-2026-0612-001."
+  "formatted": "Este desembolso ya se procesó. Referencia: REF-2026-0612-001."
 }
 ```
 
@@ -322,7 +319,7 @@ Y la respuesta ante un reintento con la misma llave (P10 en acción):
 ```json
 {
   "name": "get_loan_status",
-  "description": "Get the current status of a loan (balance, next payment, installments paid).\n\nOperation Level: 1 (Read)\n\nUse when the user says: \"cómo va mi préstamo\", \"cuánto debo\", \"cuándo es mi próximo pago\", \"loan status\".",
+  "description": "Get the current status of a loan (balance, next payment, installments paid).\n\nOperation Level: 1 (Read)\n\nUse when the user asks about an existing loan — e.g. \"cómo va mi préstamo\", \"cuánto debo\", \"cuándo es mi próximo pago\".\nDo NOT use to check pre-approval offers (use get_loan_offers).",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -334,7 +331,7 @@ Y la respuesta ante un reintento con la misma llave (P10 en acción):
 }
 ```
 
-Con respuesta rica (`data` + `formatted` + `message_for_user` + `available_actions` que ofrezca, p. ej., adelantar un pago).
+Con respuesta de alta señal (`data` + `formatted`; `available_actions` solo si hay estado que reportar — p. ej., una cuota vencida con su `payment_reference` listo para pagar).
 
 ---
 

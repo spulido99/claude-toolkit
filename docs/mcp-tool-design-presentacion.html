@@ -183,7 +183,7 @@
     <div class="flow">
       <div class="step"><span class="s">1</span><span class="d">Le entregas al modelo la lista de tools como <strong>texto</strong></span></div>
       <div class="step"><span class="s">2</span><span class="d">El usuario dice: <em>"¿cuánto tengo en mi cuenta?"</em></span></div>
-      <div class="step"><span class="s">3</span><span class="d">El modelo <strong>elige</strong> una tool por su nombre y descripción<span class="arrow">→ aquí fallan los nombres genéricos (P1) y la falta de frases gatillo (P2)</span></span></div>
+      <div class="step"><span class="s">3</span><span class="d">El modelo <strong>elige</strong> una tool por su nombre y descripción<span class="arrow">→ aquí fallan los nombres genéricos (P1) y las descripciones sin cuándo-usar / cuándo-no (P2)</span></span></div>
       <div class="step"><span class="s">4</span><span class="d">El modelo <strong>genera</strong> los argumentos como JSON<span class="arrow">→ aquí fallan los tipos ambiguos (P3)</span></span></div>
       <div class="step"><span class="s">5</span><span class="d">Tu servidor ejecuta y <strong>devuelve</strong> JSON</span></div>
       <div class="step"><span class="s">6</span><span class="d">El modelo <strong>lee tu respuesta</strong> y decide: ¿terminé? ¿otra tool?<span class="arrow">→ aquí fallan las respuestas pobres (P4, P6, P7)</span></span></div>
@@ -228,7 +228,7 @@
     <h2>Los 11 principios de un vistazo</h2>
     <div class="pgrid">
       <div class="p"><span class="n">1</span><span class="t"><b>Claridad semántica</b><span>nombra por operación, no CRUD</span></span></div>
-      <div class="p"><span class="n">2</span><span class="t"><b>Lenguaje natural</b><span>frases gatillo · búsqueda por nombre</span></span></div>
+      <div class="p"><span class="n">2</span><span class="t"><b>Lenguaje natural</b><span>cuándo usar y cuándo NO · búsqueda por nombre</span></span></div>
       <div class="p"><span class="n">3</span><span class="t"><b>Tipos estructurados</b><span>schema con restricciones</span></span></div>
       <div class="p"><span class="n">4</span><span class="t"><b>Errores accionables</b><span>qué pasó + qué hacer</span></span></div>
       <div class="p"><span class="n">5</span><span class="t"><b>Terminología consistente</b><span>un término por concepto</span></span></div>
@@ -258,12 +258,14 @@
   <section class="slide center">
     <h2><span class="num">P2</span> · Compatibilidad con lenguaje natural</h2>
     <div class="why"><span class="lbl">Por qué es importante</span><p>El usuario no habla en nombres de función — dice <em>"¿cuándo pagué el arriendo?"</em>. El modelo tiende el puente comparando esa frase con tu descripción. Las tools de búsqueda son la <strong>puerta de entrada</strong> a todo el catálogo.</p></div>
-    <pre><span class="tok-com">// Frases gatillo en la descripción</span>
+    <pre><span class="tok-com">// Cuándo usar Y cuándo NO, en la descripción</span>
 {
   <span class="tok-key">"name"</span>: <span class="tok-str">"search_transactions"</span>,
   <span class="tok-key">"description"</span>: <span class="tok-str">"Search transaction history...
-     Use when the user says: \"find a charge\",
-     \"when did I pay\", \"busca un cargo\"."</span>
+     Use when the user wants past movements —
+     e.g. \"find a charge\", \"busca un cargo\".
+     Do NOT use for current balances
+     (use get_account_balances)."</span>
 }</pre>
     <p style="margin-top:.7em"><span class="tok-bad">❌</span> <code>get_customer(customer_id)</code> como única entrada — el usuario no sabe el ID.<br><span class="tok-good">✅</span> <code>find_customer(name, email, phone)</code> — busca por lo que el usuario sí conoce.</p>
   </section>
@@ -322,22 +324,23 @@
     <div class="why"><span class="lbl">Por qué es importante</span><p>Lo que devuelves es lo único que el modelo "ve" del resultado. Todo lo que no le des, lo reconstruye solo — gastando tokens y arriesgando errores con las cifras. <strong>La respuesta es un brief para el agente, no un volcado de la DB.</strong></p></div>
     <pre>{
   <span class="tok-key">"data"</span>: { <span class="tok-com">/* estructurado, para lógica */</span> },
-  <span class="tok-key">"formatted"</span>: <span class="tok-str">"Checking: $2.500 · Savings: $15.000"</span>,  <span class="tok-com">// ya formateado</span>
-  <span class="tok-key">"message_for_user"</span>: <span class="tok-str">"Estos son tus saldos. ¿Algo más?"</span>,    <span class="tok-com">// listo para decir</span>
-  <span class="tok-key">"available_actions"</span>: [ <span class="tok-com">/* próximos pasos (P7) */</span> ]
+  <span class="tok-key">"formatted"</span>: <span class="tok-str">"Checking: $2.500 · Savings: $15.000"</span>,  <span class="tok-com">// ya formateado — única representación de display</span>
+  <span class="tok-key">"available_actions"</span>: [ <span class="tok-com">/* solo con estado del servidor o nudge curado (P7) */</span> ]
 }</pre>
+    <p style="margin-top:.7em" class="muted">Alta señal: ningún campo duplica a otro (sin <code>message_for_user</code> que repita <code>formatted</code>) — la respuesta se re-lee en cada turno y la redundancia se paga siempre. El texto externo (memos, descripciones) es <strong>dato, no instrucción</strong>.</p>
   </section>
 
   <!-- 15 — P7 -->
   <section class="slide center">
     <h2><span class="num">P7</span> · Available actions (grafo de tools)</h2>
-    <div class="why"><span class="lbl">Por qué es importante</span><p>No hay código que encadene "ver saldo → transferir → confirmar". El modelo decide el siguiente paso solo, razonando desde cero cada vez. <strong>Le das un mapa en vez de obligarlo a explorar a ciegas.</strong></p></div>
+    <div class="why"><span class="lbl">Por qué es importante</span><p>El agente ya tiene el catálogo completo en su contexto — repetírselo cuesta tokens y no aporta. Lo que el catálogo <strong>no puede</strong> decirle es qué es posible <em>ahora</em>: la operación preparada con su ID y expiración, o el siguiente paso que el negocio decidió ofrecer. <strong>Eso solo viaja en la respuesta.</strong></p></div>
     <pre><span class="tok-key">"available_actions"</span>: [
-  {<span class="tok-key">"tool"</span>:<span class="tok-str">"get_transactions"</span>, <span class="tok-key">"params"</span>:{<span class="tok-key">"account_id"</span>:<span class="tok-str">"ACC-123"</span>}, <span class="tok-key">"label"</span>:<span class="tok-str">"Ver movimientos"</span>},
-  <span class="tok-com">// solo si balance > 0:</span>
-  {<span class="tok-key">"tool"</span>:<span class="tok-str">"transfer_funds"</span>, <span class="tok-key">"params"</span>:{<span class="tok-key">"from_account"</span>:<span class="tok-str">"ACC-123"</span>}, <span class="tok-key">"label"</span>:<span class="tok-str">"Transferir"</span>}
+  <span class="tok-com">// estado del servidor: la operación preparada, su llave y su expiración</span>
+  {<span class="tok-key">"tool"</span>:<span class="tok-str">"loans_disburse"</span>, <span class="tok-key">"params"</span>:{<span class="tok-key">"loan_request_id"</span>:<span class="tok-str">"lreq_abc123"</span>, <span class="tok-key">"idempotency_key"</span>:<span class="tok-str">"lreq-abc123-k7f3"</span>}, <span class="tok-key">"label"</span>:<span class="tok-str">"Desembolsar"</span>},
+  <span class="tok-com">// nudge curado por el backend (tasa promocional disponible):</span>
+  {<span class="tok-key">"tool"</span>:<span class="tok-str">"simulate_investment"</span>, <span class="tok-key">"params"</span>:{<span class="tok-key">"term_days"</span>:180}, <span class="tok-key">"label"</span>:<span class="tok-str">"Simular a 180 días"</span>}
 ]</pre>
-    <p style="margin-top:.7em" class="muted">Contextual: solo las acciones válidas en el estado actual, con los <code>params</code> ya rellenados.</p>
+    <p style="margin-top:.7em" class="muted">Incluir solo con <strong>estado del servidor</strong> o un <strong>nudge curado</strong>; omitir si solo repetiría el catálogo. Derivadas de estado y reglas de negocio — nunca del texto de los registros.</p>
   </section>
 
   <!-- 16 — P8 -->
@@ -375,9 +378,9 @@
 {
   <span class="tok-key">"status"</span>: <span class="tok-str">"already_processed"</span>,
   <span class="tok-key">"data"</span>: { <span class="tok-key">"reference"</span>: <span class="tok-str">"REF-88321"</span> },
-  <span class="tok-key">"message_for_user"</span>: <span class="tok-str">"Este desembolso ya se procesó."</span>
+  <span class="tok-key">"formatted"</span>: <span class="tok-str">"Este desembolso ya se procesó."</span>
 }</pre>
-    <p style="margin-top:.7em" class="muted">El agente genera un UUID antes de la 1ª llamada y lo reusa en cada reintento.</p>
+    <p style="margin-top:.7em" class="muted">La llave la <strong>emite el servidor</strong> en el <code>pending_confirmation</code>; el agente la repite tal cual en confirm y reintentos — <strong>nunca la genera</strong> (los "UUIDs" de un LLM son de baja entropía y una colisión se traga una operación real).</p>
   </section>
 
   <!-- 19 — P11 -->

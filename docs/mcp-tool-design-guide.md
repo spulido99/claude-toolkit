@@ -34,8 +34,8 @@ No hay magia. El ciclo es siempre el mismo:
 2. El usuario dice algo: "¿cuánto tengo en mi cuenta?"
 
 3. El modelo LEE el menú de tools y ELIGE una por su nombre y descripción.
-   → Aquí fallan los nombres genéricos (Principio 1) y la falta de
-     frases gatillo (Principio 2).
+   → Aquí fallan los nombres genéricos (Principio 1) y las descripciones
+     sin cuándo-usar / cuándo-no (Principio 2).
 
 4. El modelo GENERA los argumentos como JSON, ajustándose al inputSchema.
    → Aquí fallan los tipos ambiguos (Principio 3). Un schema laxo =
@@ -86,7 +86,7 @@ Toda tool MCP se define con tres elementos:
 ```json
 {
   "name": "get_account_balances",
-  "description": "Retrieve current balances for all sub-accounts (checking, savings, credit).\n\nOperation Level: 1 (Read)\n\nUse when the user says: \"check my balance\", \"how much do I have\", \"account balance\".",
+  "description": "Retrieve current balances for all sub-accounts (checking, savings, credit).\n\nOperation Level: 1 (Read)\n\nUse when the user asks about available money — e.g. \"check my balance\", \"how much do I have\".\nDo NOT use for transaction history (use search_transactions).",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -137,14 +137,14 @@ Nombra las tools por **operación de dominio**, no por método HTTP ni patrón C
 
 Las tools deben ser descubribles a través del lenguaje que los usuarios realmente hablan.
 
-### Frases gatillo en la descripción
+### Cuándo usar y cuándo NO usar
 
-Incluye en la descripción ejemplos de lo que diría el usuario:
+La descripción dice **cuándo usar** la tool (en el lenguaje del usuario) y **cuándo NO** — nombrando la tool hermana que sí cubre el caso excluido. Las líneas de "Do NOT use" son lo que evita que el modelo confunda tools parecidas; las frases gatillo literales son una técnica opcional que complementa (nunca reemplaza) esa prosa, útil cuando dos tools se solapan:
 
 ```json
 {
   "name": "search_transactions",
-  "description": "Search transaction history by description, merchant, or amount.\n\nUse when the user says: \"find a charge\", \"search my transactions\", \"look for a payment\", \"when did I pay\", \"find purchase from [merchant]\".",
+  "description": "Search transaction history by description, merchant, or amount.\n\nUse when the user wants to find past movements — e.g. \"find a charge\", \"when did I pay [merchant]\".\nDo NOT use for current balances (use get_account_balances).",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -165,7 +165,7 @@ Diseña tools para que el agente encuentre entidades por **nombre o alias**, no 
 ```json
 {
   "name": "find_customer",
-  "description": "Find a customer by name, email, or phone number.\n\nUse when the user says: \"find customer\", \"look up [name]\", \"search for client\".\n\nAt least one parameter is required. Returns best matches ranked by confidence. Use the returned customer_id for subsequent operations.",
+  "description": "Find a customer by name, email, or phone number.\n\nUse when the user refers to a customer by name — e.g. \"look up [name]\", \"search for client\". Do NOT use when you already have the customer_id (use get_customer).\n\nAt least one parameter is required. Returns best matches ranked by confidence. Use the returned customer_id for subsequent operations.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -205,7 +205,7 @@ Usa **tipos explícitos y restricciones** en el `inputSchema` en lugar de string
       },
       "from_account": {"type": "string", "pattern": "^ACC-[0-9]{8}$", "description": "Source account ID."},
       "to_account": {"type": "string", "pattern": "^ACC-[0-9]{8}$", "description": "Destination account ID."},
-      "idempotency_key": {"type": "string", "format": "uuid", "description": "Unique key to prevent duplicate transfers."}
+      "idempotency_key": {"type": "string", "description": "Key returned by a previous pending_confirmation. Echo it on confirm/retries; omit on first call."}
     },
     "required": ["amount", "from_account", "to_account"]
   }
@@ -335,9 +335,9 @@ El nombre calificado viaja con el valor: `loans_prepare_request` devuelve un `lo
 
 ## Principio 6: Respuestas con semántica rica
 
-> **Por qué es importante:** lo que devuelves es lo único que el modelo "ve" del resultado — y todo lo que no le des, lo va a reconstruir solo, gastando tokens y arriesgando errores. Si devuelves solo datos crudos, el modelo tiene que formatear las cifras él mismo (y puede equivocarse con un número), redactar el mensaje al usuario desde cero y deducir el siguiente paso. Si le das el texto ya formateado, el mensaje sugerido y los datos estructurados juntos, ahorras una ronda de razonamiento entera y reduces la alucinación. La respuesta no es un volcado de la base de datos: es un brief para el agente.
+> **Por qué es importante:** lo que devuelves es lo único que el modelo "ve" del resultado — y todo lo que no le des, lo va a reconstruir solo, gastando tokens y arriesgando errores. Si devuelves solo datos crudos, el modelo tiene que formatear las cifras él mismo (y puede equivocarse con un número). Pero el costo corre en ambas direcciones: la respuesta es contexto del agente y se **re-lee en cada turno** de la conversación, así que cada campo redundante se paga muchas veces. La respuesta no es un volcado de la base de datos: es un brief de alta señal para el agente.
 
-Toda respuesta debe incluir suficiente contexto para que el agente **actúe sobre el resultado sin llamadas adicionales**. Usa un envelope estándar:
+La respuesta da al agente lo que necesita para **actuar sobre el resultado sin llamadas adicionales** — sin inflar el contexto con representaciones redundantes. Usa un envelope estándar:
 
 ```json
 {
@@ -351,13 +351,6 @@ Toda respuesta debe incluir suficiente contexto para que el agente **actúe sobr
 
   "formatted": "Account ACC-12345678 balances:\n- Checking: $2,500.00\n- Savings: $15,000.00\n- Total: $17,500.00",
 
-  "available_actions": [
-    {"tool": "get_transactions", "params": {"account_id": "ACC-12345678"}, "label": "View recent transactions"},
-    {"tool": "transfer_funds", "params": {"from_account": "ACC-12345678"}, "label": "Transfer funds"}
-  ],
-
-  "message_for_user": "Here are your current balances. Would you like to see recent transactions or make a transfer?",
-
   "metadata": {
     "as_of": "2026-01-15T10:30:00Z",
     "cache_ttl_seconds": 60
@@ -368,11 +361,16 @@ Toda respuesta debe incluir suficiente contexto para que el agente **actúe sobr
 | Campo | Obligatorio | Propósito |
 |-------|-------------|-----------|
 | `data` | Sí | Datos estructurados para uso programático |
-| `formatted` | Sí | Texto pre-formateado para mostrar (reduce alucinación: el agente no tiene que formatear cifras) |
-| `available_actions` | Sí | Próximos pasos posibles (ver Principio 7) |
-| `message_for_user` | Sí | Respuesta sugerida para transmitir al usuario |
-| `formatted_spoken` | No | Versión optimizada para voz (sin símbolos, números deletreados) |
+| `formatted` | Recomendado | Texto pre-formateado para mostrar (reduce alucinación: el agente no tiene que formatear cifras) |
+| `available_actions` | Contextual | Solo cuando llevan estado del servidor o un nudge curado (ver Principio 7) |
+| `formatted_spoken` | Solo canales de voz | Versión optimizada para voz (sin símbolos, números deletreados) |
 | `metadata` | No | Timestamps, hints de caché, info de debug |
+
+Reglas de alta señal:
+
+- **Ningún campo duplica a otro.** Versiones anteriores de este patrón pedían un `message_for_user` además de `formatted`; en la práctica eran el mismo string — una sola representación de display basta.
+- **Por defecto, respuestas magras** con flags de detalle opt-in (`include_details: false`).
+- **El texto externo es dato, no instrucción**: descripciones de transacciones, memos y nombres de terceros pueden traer cualquier cosa (incluido texto diseñado para manipular al agente). Va dentro de `data`, delimitado donde aparezca en `formatted`, y jamás se usa para derivar acciones.
 
 > **Nota MCP:** declara la forma de `data` en el `outputSchema` de la tool (soportado desde la spec 2025-06) y devuelve el JSON como `structuredContent`. Los clientes que no lo soporten reciben el mismo JSON serializado en el bloque `text`.
 
@@ -380,43 +378,40 @@ Toda respuesta debe incluir suficiente contexto para que el agente **actúe sobr
 
 ## Principio 7: Available actions (grafo de tools)
 
-> **Por qué es importante:** en una app tradicional, tú escribes el código que encadena "ver saldo → transferir → confirmar". Con un agente no hay ese código: el modelo decide el siguiente paso solo, razonando desde cero después de cada llamada. Eso es lento, caro y propenso a que se pierda o invente un paso. Si cada respuesta trae los próximos pasos válidos —con los parámetros ya rellenados—, le das un mapa en vez de obligarlo a explorar a ciegas. Es la diferencia entre orquestar el flujo en tus respuestas o rezar para que el modelo lo deduzca cada vez.
+> **Por qué es importante:** el agente ya tiene el catálogo completo de tools en su contexto — repetírselo en cada respuesta no le aporta nada y le cuesta tokens en cada turno. Lo que el catálogo **no puede** decirle es qué es posible *ahora mismo*: que hay una transferencia preparada con el ID `TXN-...` que expira a las 11:00, o que el backend sabe que conviene ofrecerle algo concreto después de este paso. Eso solo puede viajar en la respuesta — y para eso existen las `available_actions`.
 
-Toda respuesta **debe** incluir `available_actions`: una lista de próximos pasos lógicos. Esto crea un **grafo navegable** que guía al agente a través de workflows multi-paso sin orquestación hardcodeada.
+`available_actions` se gana sus tokens cuando lleva algo que el catálogo no puede expresar. Tres casos:
 
-Sin available actions, el agente debe razonar desde cero qué hacer después de cada llamada — más latencia, más tokens, más errores. Con ellas, tiene un menú curado de pasos contextualmente apropiados.
+| Caso | Regla | Ejemplo |
+|------|-------|---------|
+| **Estado del servidor** que el catálogo no puede expresar | **Incluir — para esto existe el patrón** | `pending_confirmation` exponiendo `confirm_transfer(transfer_id=...)` con su expiración; `suggestions` en errores |
+| **Nudge curado de alto valor** del backend | Incluir deliberadamente | Tras `create_investment`, sugerir `simulate_investment` con un plazo que el backend sabe que rinde mejor |
+| **Repetir el catálogo** | **Omitir** | Tras `get_account_balances`, sugerir `transfer_funds` sin params — el agente ya tiene todas las descripciones |
 
 ```
-get_account_balances
-    ├──> get_account_details
-    ├──> get_transactions
-    └──> transfer_funds
-
-get_transactions
-    ├──> get_transaction_details
-    ├──> dispute_transaction
-    └──> export_transactions
-
 transfer_funds (pending_confirmation)
     ├──> confirm_transfer
+    └──> cancel_pending_operation
+
+dispute_transaction (pending_confirmation)
+    ├──> confirm_dispute
     └──> cancel_pending_operation
 ```
 
 ### Acciones dinámicas según el estado
 
-Las acciones deben ser **contextuales** — solo muestra las válidas en el estado actual:
+Las acciones se derivan de **estado del servidor y reglas de negocio** (nunca del contenido textual de los registros — ver Principio 6):
 
 ```json
 "available_actions": [
-  {"tool": "get_transactions", "params": {"account_id": "ACC-12345678"}, "label": "View transactions"},
-  // Solo si balance > 0:
-  {"tool": "transfer_funds", "params": {"from_account": "ACC-12345678"}, "label": "Transfer funds"},
-  // Solo si no hay alerta configurada ya:
-  {"tool": "set_balance_alert", "params": {"account_id": "ACC-12345678"}, "label": "Set low-balance alert"}
+  // Solo si hay una operación pendiente en esta cuenta:
+  {"tool": "cancel_pending_operation", "params": {"operation_id": "TXN-20260115-001"}, "label": "Cancel pending transfer"},
+  // Nudge curado: el backend sabe que hay una tasa promocional disponible:
+  {"tool": "simulate_investment", "params": {"term_days": 180}, "label": "Simulate a 180-day investment at the promotional rate"}
 ]
 ```
 
-Cada acción incluye: `tool` (nombre exacto), `params` (pre-rellenados con lo que ya se sabe), `label` y opcionalmente `description`.
+Cada acción incluye: `tool` (nombre exacto), `params` (pre-rellenados con el estado que el agente no podría inferir), `label` y opcionalmente `description`.
 
 ---
 
@@ -446,7 +441,7 @@ Clasifica toda tool por su **nivel de impacto** para determinar qué confirmaci�
 ```json
 {
   "name": "transfer_funds",
-  "description": "Transfer funds between accounts.\n\nOperation Level: 4 (Financial - requires user confirmation)\n\nUse when the user says: \"transfer money\", \"send funds\"."
+  "description": "Transfer funds between accounts.\n\nOperation Level: 4 (Financial - requires user confirmation)\n\nUse when the user wants to move money — e.g. \"transfer money\", \"send funds\". Do NOT use for credit card payments (use pay_credit_card)."
 }
 ```
 
@@ -492,7 +487,7 @@ Las operaciones de **Nivel 3 en adelante** no deben ejecutarse inmediatamente. L
       "tool": "confirm_transfer",
       "params": {
         "transfer_id": "TXN-20260115-001",
-        "idempotency_key": "550e8400-e29b-41d4-a716-446655440000"
+        "idempotency_key": "txn-20260115-001-k7f3"
       }
     },
     "cancel_method": {
@@ -501,9 +496,11 @@ Las operaciones de **Nivel 3 en adelante** no deben ejecutarse inmediatamente. L
     },
     "expires_at": "2026-01-15T11:00:00Z"
   },
-  "message_for_user": "I'd like to transfer $150.00 from Main Checking to Joint Savings. No fees apply. Shall I proceed?"
+  "formatted": "I'd like to transfer $150.00 from Main Checking to Joint Savings. No fees apply. Shall I proceed?"
 }
 ```
+
+La `idempotency_key` del `confirmation_method` la **emitió el servidor** al preparar la operación — el agente solo la repite (ver Principio 10).
 
 **Por qué delegar:** el usuario ve exactamente qué va a pasar antes de que pase; la ejecución solo corre tras una aprobación explícita; y queda un audit trail de quién aprobó qué, cuándo y por dónde.
 
@@ -521,12 +518,12 @@ Las operaciones de **Nivel 3 en adelante** no deben ejecutarse inmediatamente. L
 
 > **Por qué es importante:** un agente reintenta de formas que el código humano no. Un timeout de red, un error que malinterpretó, o simplemente un bucle de razonamiento pueden hacer que llame a `transfer_funds` dos o tres veces para la *misma* intención del usuario. Sin protección, eso son dos o tres transferencias reales. La llave de idempotencia le dice al backend "esta es la misma operación que ya viste, devuelve el resultado anterior y no la ejecutes de nuevo". Es tu red de seguridad contra la naturaleza repetitiva e impredecible de un agente. Asume que toda llamada con efectos *va* a repetirse.
 
-Toda tool **transaccional** (Nivel 3+) debe aceptar un parámetro `idempotency_key` para prevenir ejecución duplicada por reintentos, fallos de red o loops del agente.
+Toda tool **transaccional** (Nivel 3+) debe aceptar un parámetro `idempotency_key`. La llave la **emite el servidor y el agente solo la repite** — nunca la inventa el modelo: los "UUIDs" que muestrea un LLM son de baja entropía (gravitan hacia ejemplos memorizados), y una colisión de llaves se traga silenciosamente una operación legítima — el peor modo de falla posible para un mecanismo de dedupe en tools financieras.
 
 ### Cómo funciona
 
-1. El agente genera un UUID antes de la primera llamada
-2. Lo pasa como `idempotency_key`
+1. La tool Nivel 3+ **prepara** la operación (Principio 9) y devuelve `pending_confirmation` incluyendo una `idempotency_key` generada server-side (p. ej., derivada del ID de la operación preparada)
+2. El agente **repite** esa llave en la llamada de `confirm_*` — y en cualquier reintento. El agente nunca genera llaves
 3. El backend guarda la llave junto con el resultado de la operación
 4. Si llega la misma llave de nuevo, el backend devuelve el **resultado original** sin re-ejecutar:
 
@@ -534,7 +531,7 @@ Toda tool **transaccional** (Nivel 3+) debe aceptar un parámetro `idempotency_k
 {
   "status": "already_processed",
   "data": { "reference": "REF-88321" },
-  "message_for_user": "This transfer was already processed. Reference: REF-88321."
+  "formatted": "This transfer was already processed. Reference: REF-88321."
 }
 ```
 
@@ -542,11 +539,11 @@ Toda tool **transaccional** (Nivel 3+) debe aceptar un parámetro `idempotency_k
 
 | Regla | Descripción |
 |-------|-------------|
-| Formato | UUID v4 o determinístico `{operation}-{entity_id}-{timestamp}` |
+| Formato | String opaco generado por el servidor (p. ej., derivado del ID de la operación preparada) |
 | Alcance | Por tool, por usuario |
-| TTL | Mínimo 24 horas para operaciones financieras |
-| Colisión | Devolver el resultado original, **no** ejecutar de nuevo |
-| Responsabilidad del agente | Generar la llave antes de la primera llamada, reusarla en reintentos |
+| TTL | Default sugerido: mínimo 24 horas para operaciones financieras |
+| Colisión | Devolver el resultado original con `"status": "already_processed"`, **no** ejecutar de nuevo |
+| Responsabilidad del agente | Repetir la llave del `pending_confirmation` en confirm y reintentos — nunca generarla |
 
 ---
 
@@ -589,7 +586,7 @@ Este es un principio de **frontera de confianza**, independiente del tipado (Pri
     "type": "object",
     "properties": {
       "loan_request_id": {"type": "string", "description": "Confirmed loan request to disburse."},
-      "idempotency_key": {"type": "string", "format": "uuid"}
+      "idempotency_key": {"type": "string", "description": "Key returned by loans_prepare_request. Echo it exactly."}
     },
     "required": ["loan_request_id", "idempotency_key"]
   }
@@ -647,7 +644,7 @@ Toda acción de la UI debe tener una tool correspondiente, o una **exclusión do
 ```json
 {
   "name": "get_account_balances",
-  "description": "Retrieve current balances for all sub-accounts (checking, savings, credit).\n\nOperation Level: 1 (Read)\n\nUse when the user says: \"check my balance\", \"how much do I have\", \"account balance\", \"what's in my account\".\n\nReturns balances by sub-account with available_actions for next steps.",
+  "description": "Retrieve current balances for all sub-accounts (checking, savings, credit).\n\nOperation Level: 1 (Read)\n\nUse when the user asks about available money — e.g. \"check my balance\", \"how much do I have\".\nDo NOT use for transaction history (use search_transactions).\n\nReturns balances by sub-account with currency and as-of timestamp.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -679,25 +676,14 @@ Toda acción de la UI debe tener una tool correspondiente, o una **exclusión do
     "total": {"value": 17500.00, "currency": "USD"}
   },
   "formatted": "Account ACC-12345678 balances:\n- Checking: $2,500.00\n- Savings: $15,000.00\n- Total: $17,500.00",
-  "message_for_user": "Here are your current account balances.",
-  "available_actions": [
-    {
-      "tool": "get_transactions",
-      "params": {"account_id": "ACC-12345678", "limit": 10},
-      "label": "View recent transactions"
-    },
-    {
-      "tool": "transfer_funds",
-      "params": {"from_account": "ACC-12345678"},
-      "label": "Transfer funds"
-    }
-  ],
   "metadata": {
     "as_of": "2026-01-15T10:30:00Z",
     "cache_ttl_seconds": 60
   }
 }
 ```
+
+Nota: sin `available_actions` — es una lectura Nivel 1 y los siguientes pasos estáticos ya viven en el catálogo (Principio 7). Se incluirían solo si hubiera estado del servidor que reportar (p. ej., una operación pendiente sobre esta cuenta).
 
 ### Respuesta de error
 
@@ -730,7 +716,8 @@ Verifica cada tool antes de publicarla en el servidor MCP.
 
 ### Descripción y descubrimiento
 - [ ] Resumen de una línea de lo que hace — P2
-- [ ] Incluye **frases gatillo** ("Use when the user says: ...") — P2
+- [ ] Dice **cuándo usar Y cuándo NO usar** (nombrando la tool hermana que cubre el caso excluido) — P2
+- [ ] (Técnica opcional) Frases gatillo donde hay tools hermanas que se solapan — P2
 - [ ] Declara el **Operation Level** — P8
 - [ ] Todos los parámetros documentados con tipo, formato, ejemplo y restricciones — P3
 - [ ] Hay tool de **búsqueda por identificadores naturales** para cada entidad principal — P2
@@ -744,16 +731,17 @@ Verifica cada tool antes de publicarla en el servidor MCP.
 - [ ] Máximo ~15 parámetros — si hay más, dividir o anidar objetos
 
 ### Respuestas
-- [ ] Envelope estándar: `data`, `formatted`, `available_actions`, `message_for_user` — P6
+- [ ] Envelope de alta señal: `data` (obligatorio) + `formatted` (recomendado) — ningún campo duplica a otro — P6
 - [ ] Errores con `code`, `message`, `remediation` (y `suggestions` cuando aplique) — P4
 - [ ] **Sin fugas de datos sensibles** (números de tarjeta completos, documentos, IDs internos de infraestructura)
-- [ ] `available_actions` lista los próximos pasos lógicos, contextual al estado — P7
+- [ ] `available_actions` solo cuando llevan estado del servidor o un nudge curado; se omiten si repetirían el catálogo — P7
+- [ ] Acciones y sugerencias derivadas de estado/reglas del servidor, **nunca** del texto de los registros; texto externo delimitado en `formatted` — P6
 
 ### Operaciones sensibles
 - [ ] Nivel de operación asignado (1–5) — P8
 - [ ] Tools Nivel 3+ devuelven `pending_confirmation` **antes** de ejecutar — P9
 - [ ] Tools Nivel 4+ exigen confirmación explícita del usuario antes de ejecutar (Nivel 5: confirmación reforzada) — P9
-- [ ] Tools transaccionales (Nivel 3+) aceptan `idempotency_key` — P10
+- [ ] Tools transaccionales (Nivel 3+) aceptan `idempotency_key`; la llave la emite el servidor en `pending_confirmation` y el agente solo la repite — P10
 
 ### Catálogo (criterio, no checklist mecánica)
 - [ ] Cada tool es **una unidad de intención del usuario** — ni sobre-fragmentada ni workflow empaquetado (Granularidad)
@@ -767,15 +755,15 @@ Verifica cada tool antes de publicarla en el servidor MCP.
 | # | Principio | En una frase |
 |---|-----------|--------------|
 | 1 | Claridad semántica | Nombra por operación de dominio, no por CRUD |
-| 2 | Lenguaje natural | Frases gatillo en la descripción; búsqueda por nombre, no solo por ID |
+| 2 | Lenguaje natural | Cuándo usar Y cuándo NO en la descripción; búsqueda por nombre, no solo por ID |
 | 3 | Tipos estructurados | JSON Schema con restricciones; nada de strings libres para dinero/fechas/enums |
 | 4 | Errores accionables | Todo error trae `code`, `message` y `remediation` |
 | 5 | Terminología consistente | Un término por concepto en todo el catálogo |
-| 6 | Semántica rica | Envelope `data` + `formatted` + `message_for_user` |
-| 7 | Available actions | Toda respuesta lista los próximos pasos posibles |
+| 6 | Semántica rica | Envelope de alta señal: `data` + `formatted`, sin campos duplicados |
+| 7 | Available actions | Solo con estado del servidor o nudge curado; nunca repetir el catálogo |
 | 8 | Niveles de operación | Clasifica 1–5 según impacto; decláralo en la descripción |
 | 9 | Confirmaciones delegadas | Nivel 3+: preparar → `pending_confirmation` → ejecutar |
-| 10 | Idempotencia | Nivel 3+ acepta `idempotency_key`; colisión = resultado original |
+| 10 | Idempotencia | Llave emitida por el servidor, repetida por el agente; colisión = resultado original |
 | 11 | Parámetros seguros | Identidad y credenciales jamás en `inputSchema` — se inyectan server-side |
 
 ---
