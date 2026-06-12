@@ -103,6 +103,7 @@ Become a LinkedIn Top Voice on AI topics.
 
 - **[Guía de Diseño de Tools para MCP](docs/mcp-tool-design-guide.md)** — Buenas prácticas para construir tools de MCP bien diseñadas (en español, ejemplos agnósticos en JSON Schema). Adaptación standalone del skill `tool-design` de `deepagents-builder`, pensada para compartir con equipos de desarrollo.
 - **[Walkthrough: de una API REST a tools MCP](docs/mcp-tool-design-walkthrough.md)** — Caso completo de extremo a extremo: toma una API REST de préstamos, la expone mal, muestra por qué falla con un agente y la reconstruye aplicando los 11 principios. Complemento práctico de la guía.
+- **[Presentación (HTML)](docs/mcp-tool-design-presentacion.html)** — Slide deck autocontenido (un solo archivo, sin dependencias) para presentar el material de forma didáctica a un equipo. Se abre con doble clic; navega con ← → y `F` para pantalla completa.
 
 ## Repository Structure
 
