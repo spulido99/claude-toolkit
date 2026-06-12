@@ -35,7 +35,7 @@ agent = create_deep_agent(
     memory=["./AGENTS.md"],
     skills=["./skills/"],              # Load SKILL.md files from directory
     middleware=[logging_middleware],
-    interrupt_on={"tool": {"allowed_decisions": ["approve", "reject", "modify"]}},
+    interrupt_on={"write_doc": {"allowed_decisions": ["approve", "edit", "reject"]}},  # keyed by tool name
     checkpointer=checkpointer,
     store=store,
 )
@@ -330,11 +330,12 @@ agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You are a support agent with full capabilities.",
     tools=[process_refund, delete_account, read_data],
-    checkpointer=MemorySaver(),
+    checkpointer=MemorySaver(),  # REQUIRED for interrupts
     interrupt_on={
-        "tool": {
-            "allowed_decisions": ["approve", "reject", "modify"],
-        }
+        # Keyed by tool name. Valid decisions: approve, edit, reject, respond
+        "process_refund": {"allowed_decisions": ["approve", "edit", "reject"]},
+        "delete_account": {"allowed_decisions": ["approve", "reject"]},
+        "read_data": False,  # no pause for reads
     },
 )
 
@@ -342,7 +343,7 @@ agent = create_deep_agent(
 config = {"configurable": {"thread_id": "session-1"}}
 for event in agent.stream({"messages": [...]}, config, stream_mode="values"):
     if "__interrupt__" in event:
-        decision = input("Approve? (approve/reject/modify): ")
+        decision = input("Approve? (approve/edit/reject): ")
         agent.invoke(None, config)  # Resume execution
 ```
 
@@ -465,7 +466,7 @@ for event in agent.stream(
 | `config_schema=` | `context_schema=` | Runtime context injection |
 | `InjectedState` / `InjectedStore` | `ToolRuntime` | Secure context injection in tools |
 | `from langchain_core.tools import tool` | `from langchain.tools import tool` | Consolidated import path |
-| `interrupt_before=["tool_name"]` | `interrupt_on={"tool": {"allowed_decisions": [...]}}` | Richer HITL control |
+| `interrupt_before=["tool_name"]` | `interrupt_on={"tool_name": {"allowed_decisions": [...]}}` | Richer HITL control, keyed by tool name |
 | Agent-as-tool (only pattern) | `subagents=` dicts + `CompiledSubAgent` | Native subagent support |
 | `pip install langgraph langchain-core langchain-anthropic` | `pip install deepagents` | Single package |
 | Model as object only | `"provider:model"` string | String format is standard |
@@ -494,7 +495,8 @@ agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-5-20250929",
     tools=[...],
     system_prompt="You are a helpful assistant.",
-    interrupt_on={"tool": {"allowed_decisions": ["approve", "reject"]}},
+    checkpointer=MemorySaver(),  # required for interrupts
+    interrupt_on={"dangerous_tool": {"allowed_decisions": ["approve", "reject"]}},  # keyed by tool name
 )
 ```
 

@@ -155,7 +155,7 @@ def create_customer_service_agent():
         ],
         checkpointer=MemorySaver(),
         interrupt_on={
-            "tool": {"allowed_decisions": ["approve", "reject"]},
+            "process_refund": {"allowed_decisions": ["approve", "reject"]},  # keyed by tool name
         },
     )
 ```

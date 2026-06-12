@@ -1,68 +1,25 @@
 ---
-name: AI-Friendly Tool Design
-description: This skill should be used when the user asks to "design tools", "create tools for agent", "tool design", "API to tools", "define tools", "convert API to tools", or needs guidance on designing AI-friendly tools for agents. Provides principles from AI-Friendly API Design, Agent Native architecture, and real-world tool catalogs.
+name: tool-design
+description: This skill should be used when the user asks to "design tools", "create tools for agent", "tool design", "API to tools", "define tools", "convert API to tools", or needs guidance on designing AI-friendly tools for agents — LangChain `@tool` functions, MCP tool definitions, or DeepAgents tool catalogs. Provides principles from AI-Friendly API Design, Agent Native architecture, and real-world tool catalogs.
 ---
 
 # AI-Friendly Tool Design
 
-Design tools that agents can discover, understand, and compose effectively. These **11 principles** bridge API design with agent-native architecture to produce tools that work seamlessly in LLM-driven workflows.
+Design tools that agents can discover, understand, and compose effectively. These 11 principles bridge API design with agent-native architecture to produce tools that work seamlessly in LLM-driven workflows.
 
-## Three Levels of Design
-
-Tool design decisions live at three distinct levels of abstraction. The 11 numbered principles below all operate at the **tool level** (how to design a single tool). Two other levels are covered separately and are **not** part of the per-tool quality score:
+Tool design decisions live at three levels of abstraction; the numbered principles all operate at the **tool level**:
 
 | Level | Question it answers | Where it lives |
 |-------|--------------------|----------------|
 | **Tool** | How do I design one good tool? | Principles 1–11 (below) |
-| **Catalog** | Which tools exist, at what size, grouped how? | [Catalog-Level Design](#catalog-level-design) — Granularity, Bounded Contexts, Parity |
-| **Format** | How does a tool serialize to a protocol? | [MCP Generation Pattern](#mcp-generation-pattern) |
+| **Catalog** | Which tools exist, at what size, grouped how? | [Catalog Organization](#catalog-organization) — Granularity, Bounded Contexts, Parity |
+| **Format** | How does a tool serialize to a protocol? | MCP Alignment in [ai-friendly-principles.md](references/ai-friendly-principles.md) |
 
-### Where these principles come from
-
-The 11 tool-level principles are the union of two source references, made traceable here:
-
-| # | Principle | Source |
-|---|-----------|--------|
-| 1 | Semantic Clarity over CRUD | `ai-friendly` #1 (Semantic Clarity) |
-| 2 | Natural Language Compatibility | `ai-friendly` #2 (Docs for LLMs) + #3 (Search-First) |
-| 3 | Structured Types with JSON Schema | `ai-friendly` #5/#6 (format standards, MCP types) |
-| 4 | Actionable Error Responses | `ai-friendly` #4 (Error Design) |
-| 5 | Consistent Terminology | `ai-friendly` #5 (Consistency) |
-| 6 | Rich Response Semantics | `agent-native` #4 (Rich Semantics) |
-| 7 | Available Actions (Tool Graph) | `agent-native` #1 (Available Actions) |
-| 8 | Operation Levels | `agent-native` #2 (Operation Levels) |
-| 9 | Delegated Confirmations | `agent-native` #3 (Delegated Confirmations) |
-| 10 | Idempotency Keys | `agent-native` #5 (Idempotency) |
-| 11 | Secure Parameters | `tool-patterns` (ToolRuntime) + checklist (Security) |
-
-The remaining source principles are **catalog-level**, not tool-level: **Bounded Contexts** (`agent-native` #6) and **Parity** (`agent-native` #7), joined by **Granularity** (new — it resolves the gap between atomic primitives and workflow-shaped tools). **MCP Alignment** (`ai-friendly` #6) is the format level. See [Catalog-Level Design](#catalog-level-design).
+This file is the **index**: each principle is summarized here with a pointer to its canonical reference. When this summary and a reference disagree, **the reference wins**.
 
 ## Principle 1: Semantic Clarity Over CRUD
 
-Name tools by **domain operation**, not HTTP method or CRUD pattern. The agent selects tools based on name and description — generic names cause confusion and misrouting.
-
-```python
-# Bad: Generic CRUD name — agent can't distinguish from dozens of "get" tools
-@tool
-def get_resource(resource_type: str, resource_id: str) -> dict:
-    """Get a resource by type and ID."""
-    pass
-
-# Good: Domain-specific name — agent knows exactly when to use it
-@tool
-def get_account_balances(account_id: str) -> dict:
-    """Retrieve current balances for all sub-accounts (checking, savings, credit).
-
-    Use when the user says: "check my balance", "how much do I have",
-    "account balance", "what's in my account".
-
-    Returns:
-        Balances by sub-account with currency and as-of timestamp.
-    """
-    pass
-```
-
-**Rule of thumb**: If the tool name makes sense as a sentence completion for "I need to ___", it is well-named.
+Name tools by **domain operation**, not HTTP method or CRUD pattern. The agent selects tools based on name and description — generic names cause confusion and misrouting. Rule of thumb: if the name completes the sentence "I need to ___", it is well-named.
 
 | Bad Name | Good Name | Why |
 |----------|-----------|-----|
@@ -71,900 +28,165 @@ def get_account_balances(account_id: str) -> dict:
 | `update_record` | `change_shipping_address` | Clear user-facing action |
 | `delete_item` | `cancel_subscription` | Domain-specific consequence |
 
-**Casing:** tool names — **and their parameters and response fields** — are all `snake_case` (`loans_simulate`, `installments_quantity`), never camelCase (`installmentsQuantity`) or Header-Case (`Incognia-Request-Token`). This is mechanical: enforce it with a linter, not judgment. The terminology consistency in Principle 5 rides on top of this casing rule.
+**Casing**: tool names — **and their parameters and response fields** — are all `snake_case` (`loans_simulate`, `installments_quantity`), never camelCase or Header-Case. Mechanical: enforce with a linter.
+
+**Full reference**: [ai-friendly-principles.md — Principle 1](references/ai-friendly-principles.md)
 
 ## Principle 2: Natural Language Compatibility
 
-Tools must be discoverable through the language users actually speak. Include **trigger phrases** in docstrings and design for **search-first** interaction patterns.
-
-### Trigger Phrases in Docstrings
+Tool descriptions are the **primary routing mechanism** for the LLM. Every description states: a one-line summary, **when to use** (in the users' language), **when NOT to use** (naming the sibling tool that covers the excluded case), parameter semantics with examples, and the operation level.
 
 ```python
 @tool
-def search_transactions(
-    account_id: str,
-    query: str,
-    date_from: str = None,
-    date_to: str = None
-) -> dict:
+def search_transactions(account_id: str, query: str, date_from: str = None) -> dict:
     """Search transaction history by description, merchant, or amount.
 
-    Use when the user says: "find a charge", "search my transactions",
-    "look for a payment", "when did I pay", "find purchase from [merchant]".
-
-    Args:
-        account_id: Account identifier.
-        query: Natural language search (merchant name, amount, description).
-        date_from: Start date (YYYY-MM-DD). Defaults to 30 days ago.
-        date_to: End date (YYYY-MM-DD). Defaults to today.
-
-    Returns:
-        Matching transactions with relevance score.
+    Use when the user wants to find past movements — e.g. "find a charge",
+    "when did I pay [merchant]". Do NOT use for current balances
+    (use get_account_balances).
     """
-    pass
 ```
 
-### Search-First Pattern
+The "Do NOT use" boundaries are what prevent misrouting between similar tools. Trigger phrase lists are an optional technique for overlapping siblings — they complement, never replace, the when/when-not prose. Design **search-first**: every entity findable by name/email/phone, not only by opaque IDs.
 
-Design tools so the agent can find entities by **name or alias**, not only by opaque internal IDs.
+**Full reference**: [ai-friendly-principles.md — Principle 2](references/ai-friendly-principles.md)
 
-```python
-# Bad: Requires opaque ID the user never knows
-@tool
-def get_customer(customer_id: str) -> dict:
-    """Fetch customer by internal ID."""
-    pass
-
-# Good: Search by natural identifiers first
-@tool
-def find_customer(
-    name: str = None,
-    email: str = None,
-    phone: str = None
-) -> dict:
-    """Find a customer by name, email, or phone number.
-
-    Use when the user says: "find customer", "look up [name]",
-    "search for client".
-
-    At least one parameter is required. Returns best matches ranked
-    by confidence. Use the returned customer_id for subsequent operations.
-    """
-    pass
-```
-
-## Principle 3: Structured Types with JSON Schema
+## Principle 3: Structured Types
 
 Use **explicit types and constraints** instead of free-form strings. This prevents agent errors and enables validation before execution.
-
-### Money as Structured Type
-
-```python
-# Bad: Ambiguous — is this USD? Cents or dollars?
-@tool
-def transfer_funds(amount: float, to_account: str) -> dict:
-    pass
-
-# Good: Structured money type with explicit currency
-@tool
-def transfer_funds(
-    amount: dict,       # {"value": 150.00, "currency": "USD"}
-    from_account: str,
-    to_account: str,
-    idempotency_key: str = None
-) -> dict:
-    """Transfer funds between accounts.
-
-    Args:
-        amount: Money object with 'value' (decimal) and 'currency' (ISO 4217).
-                Example: {"value": 150.00, "currency": "USD"}
-        from_account: Source account ID.
-        to_account: Destination account ID.
-        idempotency_key: Unique key to prevent duplicate transfers.
-    """
-    pass
-```
-
-### JSON Schema for Tool Parameters
-
-```json
-{
-  "name": "transfer_funds",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "amount": {
-        "type": "object",
-        "properties": {
-          "value": {"type": "number", "minimum": 0.01},
-          "currency": {"type": "string", "enum": ["USD", "EUR", "MXN"], "default": "USD"}
-        },
-        "required": ["value", "currency"]
-      },
-      "from_account": {"type": "string", "pattern": "^ACC-[0-9]{8}$"},
-      "to_account": {"type": "string", "pattern": "^ACC-[0-9]{8}$"},
-      "idempotency_key": {"type": "string", "format": "uuid"}
-    },
-    "required": ["amount", "from_account", "to_account"]
-  }
-}
-```
-
-### Standard Type Patterns
 
 | Concept | Bad | Good |
 |---------|-----|------|
 | Money | `amount: float` | `amount: {"value": N, "currency": "X"}` |
 | Date | `date: str` ("next Friday") | `date: str` (YYYY-MM-DD) |
-| Phone | `phone: str` (free text) | `phone: str` (E.164: +1234567890) |
 | Pagination | `page: int` | `cursor: str` (opaque, forward-only) |
 | Enum | `status: str` | `status: Literal["active", "suspended", "closed"]` |
+
+List-returning tools paginate with **announced truncation** (`has_more`, `total_count`, remediation text) and prefer filters over exhaustive paging.
+
+**Full reference**: [ai-friendly-principles.md — Principle 3](references/ai-friendly-principles.md) (includes JSON Schema patterns and Pagination & Truncation)
 
 ## Principle 4: Actionable Error Responses
 
 When a tool fails, the response must tell the agent **what went wrong and what to do next**. Never return bare error strings.
 
 ```python
-# Bad: Agent has no idea what to do
-return {"error": "Not found"}
-
-# Good: Actionable error with remediation
 return {
     "status": "error",
     "error": {
         "code": "ACCOUNT_NOT_FOUND",
         "message": "No account found with ID 'ACC-99999999'.",
-        "details": {
-            "searched_id": "ACC-99999999",
-            "search_scope": "active_accounts"
-        },
-        "remediation": "Verify the account ID or use find_customer to search by name/email.",
-        "suggestions": [
-            {
-                "tool": "find_customer",
-                "reason": "Search for the customer to get the correct account ID",
-                "params": {"name": "partial name or email"}
-            },
-            {
-                "tool": "list_accounts",
-                "reason": "List all accounts for the authenticated user",
-                "params": {}
-            }
-        ]
+        "remediation": "Verify the account ID or use find_customer to search by name.",
+        "suggestions": [{"tool": "find_customer", "reason": "Search for the customer", "params": {}}]
     }
 }
 ```
 
-### Error Response Schema
+Required fields: `code` (UPPER_SNAKE_CASE), `message`, `remediation`. Optional: `details`, `suggestions`.
 
-Every error must include these fields:
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `code` | Yes | Machine-readable error code (UPPER_SNAKE_CASE) |
-| `message` | Yes | Human-readable explanation |
-| `details` | No | Additional context about the error |
-| `remediation` | Yes | What the agent should do next |
-| `suggestions` | No | Specific tool calls that might resolve the issue |
+**Full reference**: [ai-friendly-principles.md — Principle 4](references/ai-friendly-principles.md) (includes the standard error-code table)
 
 ## Principle 5: Consistent Terminology
 
-Use **one term per concept** across all tools. Inconsistent naming forces the agent to learn synonyms and increases hallucination risk.
+Use **one term per concept** across all tools: always `account_id` (never `acct_id`), always `cursor` (never `page_token`), always `{"value": N, "currency": "X"}` for money, ISO 8601 for dates. Define shared types once in a central `schemas.py` and reuse them everywhere.
 
-### Terminology Table
+**Qualify generic identifiers by domain**: `loan_request_id`, not a bare `request_id` — the moment more than one kind of request exists, the generic name forces the agent to guess. Stay generic only for truly catalog-wide concepts (`cursor`, `idempotency_key`).
 
-| Concept | Always Use | Never Use |
-|---------|-----------|-----------|
-| Account identifier | `account_id` | `acct_id`, `account_number`, `acct_num` |
-| Customer identifier | `customer_id` | `client_id`, `user_id`, `cust_id` |
-| Money amount | `{"value": N, "currency": "X"}` | `amount: float`, `price: str` |
-| Date | `YYYY-MM-DD` | `MM/DD/YYYY`, `DD-MM-YYYY`, epoch |
-| Timestamp | ISO 8601 (`2025-01-15T10:30:00Z`) | Unix epoch, custom formats |
-| Pagination cursor | `cursor` | `page_token`, `next_id`, `offset` |
-| Search query | `query` | `q`, `search_term`, `keyword` |
-| Sort order | `sort_by`, `sort_order` | `order`, `ordering`, `sort_field` |
-
-**Casing:** every parameter **and response field** name is `snake_case` — `installments_quantity` not `installmentsQuantity`, `request_token` not `Request-Token`. Mixed casing forces the agent to track variants and raises parameter-error rates. (Tool names follow the same rule — Principle 1.)
-
-### Qualify generic identifiers by domain
-
-A bare `id`, `request_id`, `reference`, or `token` is ambiguous the moment **more than one kind** can exist in the catalog. If you have loan requests, transfer requests, and support requests, a field called `request_id` forces the agent to track *which* request it holds and risks passing the wrong one to the wrong tool. Qualify it:
-
-| Bad (ambiguous) | Good (domain-qualified) |
-|-----------------|--------------------------|
-| `request_id` | `loan_request_id`, `transfer_request_id` |
-| `id` (returned by `get_loan`) | `loan_id` |
-| `reference` | `payment_reference`, `refund_reference` |
-| `token` | `confirmation_token` |
-
-The qualified name travels with the value: `loans_prepare_request` returns a `loan_request_id`, and `loans_disburse` accepts exactly that `loan_request_id` — the agent never has to guess what a generic `request_id` refers to. Stay generic **only** when the concept is truly catalog-wide and single-meaning (`cursor`, `idempotency_key`).
-
-
-
-```python
-# Define shared types once, reuse everywhere
-from typing import TypedDict, Literal
-
-class Money(TypedDict):
-    value: float
-    currency: str  # ISO 4217
-
-class PaginatedRequest(TypedDict, total=False):
-    cursor: str
-    limit: int  # Default 20, max 100
-
-class PaginatedResponse(TypedDict):
-    data: list
-    next_cursor: str | None
-    has_more: bool
-```
+**Full reference**: [ai-friendly-principles.md — Principle 5](references/ai-friendly-principles.md) (full terminology and format tables, identifier qualification)
 
 ## Principle 6: Rich Response Semantics
 
-Every tool response should include enough context for the agent to **act on the result without additional calls**. Use a standard response envelope.
+Responses give the agent what it needs to act **without padding the context**: `data` (required, structured, high-signal), `formatted` (recommended display text), `available_actions` (contextual — Principle 7), `formatted_spoken` (voice channels only), `metadata` (optional). No field duplicates another representation.
 
-### Standard Response Pattern
+Tool responses are agent context, re-read every turn — default to lean responses with opt-in detail flags (`include_details: bool = False`).
 
-```python
-return {
-    # Raw data for programmatic use
-    "data": {
-        "account_id": "ACC-12345678",
-        "balances": [
-            {"type": "checking", "available": {"value": 2500.00, "currency": "USD"}},
-            {"type": "savings", "available": {"value": 15000.00, "currency": "USD"}}
-        ]
-    },
+**Untrusted content rule**: external pass-through text (memos, descriptions, counterparty names) is data, not instructions — keep it in `data`, delimit it in `formatted`, and never derive actions from it.
 
-    # Pre-formatted for direct display to user
-    "formatted": (
-        "Account ACC-12345678 balances:\n"
-        "- Checking: $2,500.00\n"
-        "- Savings: $15,000.00\n"
-        "- Total: $17,500.00"
-    ),
-
-    # What the agent can do next (see Principle 7)
-    "available_actions": [
-        {"tool": "get_transactions", "params": {"account_id": "ACC-12345678"}, "label": "View recent transactions"},
-        {"tool": "transfer_funds", "params": {"from_account": "ACC-12345678"}, "label": "Transfer funds"},
-        {"tool": "get_account_details", "params": {"account_id": "ACC-12345678"}, "label": "View account details"}
-    ],
-
-    # Suggested message for the agent to relay to the user
-    "message_for_user": "Here are your current balances. Would you like to see recent transactions or make a transfer?",
-
-    # Optional: voice-optimized version
-    "formatted_spoken": "Your checking account has twenty-five hundred dollars and your savings has fifteen thousand dollars.",
-
-    # Optional: metadata for agent reasoning
-    "metadata": {
-        "as_of": "2025-01-15T10:30:00Z",
-        "cache_ttl_seconds": 60
-    }
-}
-```
-
-### Response Field Reference
-
-| Field | Required | Purpose |
-|-------|----------|---------|
-| `data` | Yes | Structured data for programmatic use |
-| `formatted` | Yes | Pre-formatted text for display |
-| `available_actions` | Yes | Next possible tool calls (see Principle 7) |
-| `message_for_user` | Yes | Suggested response to relay |
-| `formatted_spoken` | No | Voice-optimized version |
-| `metadata` | No | Timestamps, cache hints, debug info |
+**Full reference**: [agent-native-principles.md — Principle 6](references/agent-native-principles.md)
 
 ## Principle 7: Available Actions (Tool Graph)
 
-Every tool response **MUST** include `available_actions` — a list of logical next steps. This creates a navigable **tool graph** that guides the agent through multi-step workflows without hardcoded orchestration.
+`available_actions` earns its tokens when it carries something the catalog cannot:
 
-### Tool Graph Example
+1. **Server state** the catalog can't express — pending confirmations with their IDs and expiry, error `suggestions`. **Include: this is the point of the pattern.**
+2. **Curated high-value nudges** from the backend — "after this, users typically do X". Include deliberately.
+3. **Catalog restatement** — a static menu of sibling tools the agent already knows. **Omit.**
 
-```
-get_account_balances
-    |
-    +--> get_account_details
-    +--> get_transactions
-    +--> transfer_funds
-    +--> set_balance_alert
+Actions always derive from server state and business rules, never from record text content.
 
-get_transactions
-    |
-    +--> get_transaction_details
-    +--> dispute_transaction
-    +--> categorize_transaction
-    +--> export_transactions
-
-transfer_funds
-    |
-    +--> get_transfer_status
-    +--> cancel_transfer (if pending)
-    +--> schedule_recurring_transfer
-```
-
-### Implementation Pattern
-
-```python
-@tool
-def get_account_balances(account_id: str) -> dict:
-    """Retrieve current balances for all sub-accounts."""
-    balances = fetch_balances(account_id)
-
-    return {
-        "data": balances,
-        "formatted": format_balances(balances),
-        "message_for_user": "Here are your current balances.",
-        "available_actions": [
-            {
-                "tool": "get_account_details",
-                "params": {"account_id": account_id},
-                "label": "View full account details",
-                "description": "See account holder info, opening date, and settings"
-            },
-            {
-                "tool": "get_transactions",
-                "params": {"account_id": account_id, "limit": 10},
-                "label": "View recent transactions",
-                "description": "See the last 10 transactions on this account"
-            },
-            {
-                "tool": "transfer_funds",
-                "params": {"from_account": account_id},
-                "label": "Transfer funds",
-                "description": "Move money from this account to another"
-            }
-        ]
-    }
-```
-
-### Dynamic Actions Based on State
-
-```python
-available_actions = []
-
-# Always available
-available_actions.append({
-    "tool": "get_transactions",
-    "params": {"account_id": account_id},
-    "label": "View transactions"
-})
-
-# Conditional: only if balance > 0
-if total_balance > 0:
-    available_actions.append({
-        "tool": "transfer_funds",
-        "params": {"from_account": account_id},
-        "label": "Transfer funds"
-    })
-
-# Conditional: only if alerts not already set
-if not has_balance_alert:
-    available_actions.append({
-        "tool": "set_balance_alert",
-        "params": {"account_id": account_id},
-        "label": "Set low-balance alert"
-    })
-```
+**Full reference**: [agent-native-principles.md — Principle 7](references/agent-native-principles.md)
 
 ## Principle 8: Operation Levels
 
-Classify every tool by its **impact level** to determine confirmation requirements. Map these levels to DeepAgents' `interrupt_on` for human-in-the-loop control.
+Classify every tool by **impact** (not HTTP verb) to determine confirmation requirements:
 
-### Level Definitions
+| Level | Category | Confirmation | Example |
+|-------|----------|-------------|---------|
+| 1 | Read | None | `get_account_balances` |
+| 2 | Create/List | None | `create_support_ticket` |
+| 3 | Update | Chat confirmation | `change_shipping_address` |
+| 4 | Financial | Explicit user approval in the conversation | `transfer_funds` |
+| 5 | Irreversible | Reinforced confirmation (re-confirm a key detail) + cancellation window | `close_account` |
 
-| Level | Category | Description | Confirmation | Example |
-|-------|----------|-------------|-------------|---------|
-| 1 | Read | Retrieve data, no side effects | None | `get_account_balances`, `search_transactions` |
-| 2 | Create/List | Create new resources, list data | None | `create_support_ticket`, `list_accounts` |
-| 3 | Update | Modify existing resources | Agent confirms | `change_shipping_address`, `update_profile` |
-| 4 | Financial | Money movement, charges | User confirms | `transfer_funds`, `process_refund` |
-| 5 | Irreversible | Cannot be undone | Explicit user approval | `close_account`, `delete_all_data` |
-
-### Mapping to DeepAgents `interrupt_on`
+In DeepAgents, map levels to `interrupt_on` — **keyed by tool name**, with a required checkpointer:
 
 ```python
-from deepagents import create_deep_agent
-from langgraph.checkpoint.memory import MemorySaver
-
-# Define tools by level
-level_1_tools = [get_account_balances, search_transactions, find_customer]
-level_2_tools = [create_support_ticket, list_accounts]
-level_3_tools = [change_shipping_address, update_profile]
-level_4_tools = [transfer_funds, process_refund]
-level_5_tools = [close_account, delete_all_data]
-
-all_tools = level_1_tools + level_2_tools + level_3_tools + level_4_tools + level_5_tools
-
-agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-5-20250929",
-    system_prompt="You handle all account operations.",
-    tools=all_tools,
-    checkpointer=MemorySaver(),
-    interrupt_on={
-        "tool": {
-            "allowed_decisions": ["approve", "reject", "modify"],
-        }
-    },  # Pauses before sensitive tools for human approval
-)
+interrupt_on = {
+    "get_account_balances": False,                                        # L1: no pause
+    "update_profile": {"allowed_decisions": ["approve", "edit", "reject"]},  # L3
+    "transfer_funds": {"allowed_decisions": ["approve", "reject"]},          # L4
+}
 ```
 
-### Tool Metadata for Level Declaration
+Valid decisions: `approve`, `edit`, `reject`, `respond` (verified against DeepAgents docs, June 2026).
 
-```python
-@tool
-def transfer_funds(
-    amount: dict,
-    from_account: str,
-    to_account: str,
-    idempotency_key: str = None
-) -> dict:
-    """Transfer funds between accounts.
-
-    Operation Level: 4 (Financial - requires user confirmation)
-
-    Use when the user says: "transfer money", "send funds",
-    "move money between accounts".
-    """
-    pass
-```
+**Full reference**: [agent-native-principles.md — Principle 8](references/agent-native-principles.md) (level-derived config, full agent setup)
 
 ## Principle 9: Delegated Confirmations
 
-For operations at **Level 3 and above**, the tool should not execute immediately. Instead, return a `pending_confirmation` status with details for the agent to present to the user.
+Level 3+ tools do not execute immediately: they validate, **stage** the operation, and return `pending_confirmation` with a summary, details, `confirmation_method`, `cancel_method`, and `expires_at`. `interrupt_on` covers in-chat approval; confirmation tools add the server-side audit trail, expiry window, and the seam where out-of-band channels (push, OTP, biometric) plug in later — Level 4-5 typically need both.
 
-### Confirmation Response Pattern
-
-```python
-@tool
-def transfer_funds(
-    amount: dict,
-    from_account: str,
-    to_account: str,
-    idempotency_key: str = None
-) -> dict:
-    """Transfer funds between accounts. Level 4: Financial."""
-
-    # Validate inputs first
-    validation = validate_transfer(amount, from_account, to_account)
-    if not validation["valid"]:
-        return {"status": "error", "error": validation["error"]}
-
-    # Return confirmation request — do NOT execute yet
-    return {
-        "status": "pending_confirmation",
-        "confirmation": {
-            "operation": "transfer_funds",
-            "summary": f"Transfer {amount['currency']} {amount['value']:.2f} from {from_account} to {to_account}",
-            "details": {
-                "amount": amount,
-                "from_account": from_account,
-                "from_account_name": "Main Checking",
-                "to_account": to_account,
-                "to_account_name": "Joint Savings",
-                "estimated_arrival": "2025-01-16",
-                "fee": {"value": 0.00, "currency": "USD"}
-            },
-            "confirmation_method": {
-                "tool": "confirm_transfer",
-                "params": {
-                    "transfer_id": "TXN-20250115-001",
-                    "idempotency_key": idempotency_key or generate_key()
-                }
-            },
-            "cancel_method": {
-                "tool": "cancel_pending_operation",
-                "params": {"operation_id": "TXN-20250115-001"}
-            },
-            "expires_at": "2025-01-15T11:00:00Z"
-        },
-        "message_for_user": (
-            "I'd like to transfer $150.00 from Main Checking to Joint Savings. "
-            "The transfer should arrive by January 16. No fees apply. "
-            "Shall I proceed?"
-        )
-    }
-```
-
-### Confirmation Execution
-
-```python
-@tool
-def confirm_transfer(transfer_id: str, idempotency_key: str) -> dict:
-    """Execute a previously confirmed transfer.
-
-    Operation Level: 4 (Financial)
-    Only call after user explicitly approves the transfer.
-    """
-    result = execute_transfer(transfer_id, idempotency_key)
-    return {
-        "status": "completed",
-        "data": result,
-        "formatted": f"Transfer {transfer_id} completed. Confirmation: {result['confirmation_number']}",
-        "message_for_user": f"Done. Your transfer of ${result['amount']['value']:.2f} is confirmed. Reference: {result['confirmation_number']}.",
-        "available_actions": [
-            {"tool": "get_transfer_status", "params": {"transfer_id": transfer_id}, "label": "Check transfer status"},
-            {"tool": "get_account_balances", "params": {"account_id": result['from_account']}, "label": "View updated balances"}
-        ]
-    }
-```
+**Full reference**: [agent-native-principles.md — Principle 9](references/agent-native-principles.md) (full flow and response shape)
 
 ## Principle 10: Idempotency Keys
 
-All **transactional tools** (Level 3+) must accept an `idempotency_key` parameter to prevent duplicate execution from retries, network issues, or agent loops.
+Transactional tools (Level 3+) accept an `idempotency_key` that is **emitted by the server** — returned inside `pending_confirmation` — and **echoed by the agent** on confirm and retries. The agent never generates keys (LLM-sampled "UUIDs" are low-entropy; a collision silently swallows a legitimate operation). Repeated key → original result with `status: "already_processed"`.
 
-```python
-@tool
-def process_refund(
-    order_id: str,
-    amount: dict,
-    reason: str,
-    idempotency_key: str = None
-) -> dict:
-    """Process a refund for an order.
-
-    Operation Level: 4 (Financial)
-
-    Args:
-        order_id: The order to refund.
-        amount: Money object {"value": N, "currency": "X"}.
-        reason: Reason for the refund.
-        idempotency_key: Unique key to prevent duplicate refunds.
-                         If omitted, one will be generated.
-                         If a refund with this key already exists,
-                         the original result is returned.
-    """
-    key = idempotency_key or f"refund-{order_id}-{generate_uuid()}"
-
-    # Check for existing operation with this key
-    existing = lookup_by_idempotency_key(key)
-    if existing:
-        return {
-            "status": "already_processed",
-            "data": existing,
-            "message_for_user": f"This refund was already processed. Reference: {existing['reference']}."
-        }
-
-    # Process new refund
-    result = execute_refund(order_id, amount, reason, key)
-    return {
-        "status": "completed",
-        "data": result,
-        "idempotency_key": key,
-        "message_for_user": f"Refund of {amount['currency']} {amount['value']:.2f} processed. Reference: {result['reference']}.",
-        "available_actions": [
-            {"tool": "get_refund_status", "params": {"refund_id": result['refund_id']}, "label": "Check refund status"}
-        ]
-    }
-```
-
-### Idempotency Key Rules
-
-| Rule | Description |
-|------|-------------|
-| Format | UUID v4 or deterministic `{operation}-{entity_id}-{timestamp}` |
-| Scope | Per-tool, per-user |
-| TTL | 24 hours minimum for financial operations |
-| Collision behavior | Return original result, do NOT execute again |
-| Agent responsibility | Generate key before first call, reuse on retries |
+**Full reference**: [agent-native-principles.md — Principle 10](references/agent-native-principles.md)
 
 ## Principle 11: Secure Parameters
 
-Tool parameters are **fully controllable by the LLM** — it can pass any value to any parameter. Therefore **no secret, credential, token, or caller identity may be a parameter.** These are injected by the framework, invisible to the model.
+Tool parameters are **fully controllable by the LLM**. No secret, credential, token, or **caller identity** (`user_id`, `customer_id`, `tenant_id`) may be a parameter — these are framework-injected (`ToolRuntime`, gateway `x-claims`), invisible to the model. Business identifiers the agent legitimately discovers (an `account_id` from a search) are fine: the distinction is **caller identity / credentials vs. operands**. This is a trust boundary, independent of typing (Principle 3): a perfectly typed `user_id: str` still lets the agent impersonate any user.
 
-This is a **trust-boundary** principle, independent of data typing (Principle 3): even a perfectly typed `user_id: str` is unsafe as a parameter, because the agent could pass *any* user's ID and read their data. Principle 3 asks "is this value well-typed?"; Principle 11 asks "is the agent allowed to choose this value at all?"
+**Full reference**: [agent-native-principles.md — Principle 11](references/agent-native-principles.md)
 
-### What never goes in a parameter
+## Catalog Organization
 
-| Never a parameter | Why | Inject instead via |
-|-------------------|-----|--------------------|
-| Caller identity: `user_id`, `customer_id`, `tenant_id` | Agent could impersonate any user / cross tenants | Auth context (`x-claims`, `ToolRuntime`) |
-| Credentials: `api_key`, `token`, `secret`, `password` | Logged or leaked through the model | Framework credentials |
-| Fraud/anti-abuse tokens (e.g. device attestation) | Spoofable if the model controls them | Framework / gateway header |
+Three catalog-level decisions, distinct from designing any single tool (not scored per-tool — they require judgment):
 
-Business identifiers the agent legitimately **discovers and passes** (an `account_id` returned by a search tool, a `loan_request_id` from a draft) are fine. The distinction is **caller identity / credentials vs. operands**. (Note the domain-qualified `loan_request_id`, not a bare `request_id` — Principle 5.)
+- **Granularity**: one tool = one unit of **user intent**, not one backend endpoint. Merge sequences whose intermediate result has no standalone use; split tools that hide steps the agent needs to compose or retry. The natural seam is the `pending_confirmation` boundary: one *prepare* tool + one *execute* tool.
+- **Bounded Contexts**: domain modules with their own `tools.py`, `schemas.py`, `formatters.py` and a `TOOLS` export. Suggested defaults: ~10 tools per domain; ~15+ tools total → consider domain subagents (see the `architecture` skill).
+- **Parity**: every user-facing UI action has a tool or a documented intentional exclusion.
 
-```python
-# Bad: identity, credential, and fraud token as parameters — the LLM controls them
-@tool
-def disburse_loan(loan_request_id: str, user_id: str, incognia_token: str) -> dict:
-    ...
-
-# Good: only the operand is a parameter; identity + fraud token injected by framework
-from langchain.tools import tool, ToolRuntime
-
-@tool
-def loans_disburse(
-    loan_request_id: str,
-    idempotency_key: str,
-    runtime: ToolRuntime[SecureContext],  # invisible to LLM: person_code, fraud token
-) -> dict:
-    """Disburse a confirmed Mini Loan. Operation Level: 4 (Financial)."""
-    person_code = runtime.context.person_code  # from x-claims, not a parameter
-    ...
-```
-
-**MCP note:** in an MCP server this means identity/credentials/fraud tokens are **never** fields in `inputSchema` — they arrive as gateway headers (e.g. Kong's `x-claims`) and are bound to the request server-side. If it is in `inputSchema`, the model can forge it.
-
-See [Tool Patterns — Security with ToolRuntime](../patterns/references/tool-patterns.md) for the full injection pattern.
-
-## Catalog-Level Design
-
-Three decisions shape the catalog as a whole — distinct from designing any single tool. They are **not scored per-tool** because they require judgment, not static checks.
-
-### Granularity — one tool = one unit of user intent
-
-Size a tool to a **unit of user intent or decision**, not to a backend endpoint or an internal step. Two failure modes pull in opposite directions:
-
-| Failure | Symptom | Fix |
-|---------|---------|-----|
-| **Over-fragmented** | Two tools are always called in sequence and the intermediate result has no standalone use to the agent (e.g. a `loan_request_id` you can only pass to the next call) | **Merge** them into one tool |
-| **Over-bundled** | One tool hides steps the agent would want to compose, skip, retry, or recover from independently (validate → check stock → pay) | **Split** into atomic primitives ([Anti-Pattern 13](../patterns/references/anti-patterns.md)) |
-
-These two pulls are not in conflict — they answer different questions:
-
-- **Composability (Anti-Pattern 13):** *Am I hiding a primitive the agent needs to drive its own flow?* If yes → keep separate.
-- **Granularity (this principle):** *Is this intermediate step a real user decision, or an artifact of how the backend is split?* If artifact → merge.
-
-> Merging two backend endpoints behind one tool does **not** violate Anti-Pattern 13. #13 forbids hiding decision points the agent needs; it does not require exposing every internal step. The natural seam is the `pending_confirmation` boundary (Principle 9): everything up to "ready to execute" is usually **one** *prepare* tool, and execution is **one** *execute* tool — no matter how many endpoints sit behind each.
-
-**Example:** `loans_create_request` (returns a bare `loan_request_id`) + `loans_confirm_request` (computes the final terms) should be **one** `loans_prepare_request` tool that returns `pending_confirmation` — the `loan_request_id` alone is never a useful stopping point for the agent.
-
-### Bounded Contexts & Parity
-
-The other two catalog decisions are detailed below and in the checklist:
-
-- **Bounded Contexts** — group tools by business domain, max 10 per domain. See [Tool Organization by Domain](#tool-organization-by-domain) below (`agent-native` #6).
-- **Parity** — every UI action has a corresponding tool, or a documented intentional exclusion. See the Coverage section of the [Tool Quality Checklist](references/tool-quality-checklist.md) (`agent-native` #7).
-
-## Tool Organization by Domain
-
-Organize tools into **domain modules** for maintainability and discoverability.
-
-### Directory Structure
-
-```
-domains/
-  banking/
-    __init__.py
-    tools.py           # Exports TOOLS list
-    schemas.py         # Shared types (Money, Account, etc.)
-    formatters.py      # Response formatting helpers
-  support/
-    __init__.py
-    tools.py
-    schemas.py
-    formatters.py
-  orders/
-    __init__.py
-    tools.py
-    schemas.py
-    formatters.py
-```
-
-### Domain Module Pattern
-
-```python
-# domains/banking/tools.py
-from langchain.tools import tool
-from .schemas import Money, Account
-from .formatters import format_balances, format_transfer
-
-@tool
-def get_account_balances(account_id: str) -> dict:
-    """Retrieve current balances for all sub-accounts."""
-    ...
-
-@tool
-def transfer_funds(amount: dict, from_account: str, to_account: str, idempotency_key: str = None) -> dict:
-    """Transfer funds between accounts."""
-    ...
-
-@tool
-def search_transactions(account_id: str, query: str, date_from: str = None, date_to: str = None) -> dict:
-    """Search transaction history."""
-    ...
-
-# Export all tools for registration
-TOOLS = [get_account_balances, transfer_funds, search_transactions]
-```
-
-### Agent Registration
-
-```python
-from deepagents import create_deep_agent
-from domains.banking.tools import TOOLS as banking_tools
-from domains.support.tools import TOOLS as support_tools
-from domains.orders.tools import TOOLS as order_tools
-
-# Option 1: Single agent with all tools (simple)
-agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-5-20250929",
-    tools=banking_tools + support_tools + order_tools,
-    system_prompt="You handle banking, support, and order operations.",
-)
-
-# Option 2: Subagents by domain (recommended for 15+ tools)
-agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-5-20250929",
-    system_prompt="Delegate to the right specialist.",
-    tools=[],
-    subagents=[
-        {
-            "name": "banking",
-            "tools": banking_tools,
-            "system_prompt": "You handle banking operations.",
-        },
-        {
-            "name": "support",
-            "tools": support_tools,
-            "system_prompt": "You handle support operations.",
-        },
-        {
-            "name": "orders",
-            "tools": order_tools,
-            "system_prompt": "You handle order operations.",
-        },
-    ],
-)
-```
-
-## Python Generation Pattern
-
-Full template for generating a Python tool with all 11 principles applied.
-
-```python
-from langchain.tools import tool
-from typing import TypedDict, Literal
-
-
-class Money(TypedDict):
-    value: float
-    currency: str
-
-
-@tool
-def get_account_balances(account_id: str) -> dict:
-    """Retrieve current balances for all sub-accounts (checking, savings, credit).
-
-    Operation Level: 1 (Read)
-
-    Use when the user says: "check my balance", "how much do I have",
-    "account balance", "what's in my account".
-
-    Args:
-        account_id: The account to query.
-
-    Returns:
-        Balances by sub-account with available_actions for next steps.
-    """
-    # --- Implementation ---
-    balances = fetch_balances(account_id)
-
-    # --- Rich Response (Principle 6) ---
-    return {
-        "status": "success",
-        "data": {
-            "account_id": account_id,
-            "balances": balances,
-            "total": sum_balances(balances)
-        },
-        "formatted": format_balances_table(balances),
-        "formatted_spoken": format_balances_spoken(balances),
-        "message_for_user": "Here are your current account balances.",
-
-        # --- Tool Graph (Principle 7) ---
-        "available_actions": [
-            {
-                "tool": "get_transactions",
-                "params": {"account_id": account_id, "limit": 10},
-                "label": "View recent transactions"
-            },
-            {
-                "tool": "transfer_funds",
-                "params": {"from_account": account_id},
-                "label": "Transfer funds"
-            },
-            {
-                "tool": "get_account_details",
-                "params": {"account_id": account_id},
-                "label": "View account details"
-            }
-        ],
-        "metadata": {
-            "as_of": datetime.utcnow().isoformat(),
-            "cache_ttl_seconds": 60
-        }
-    }
-```
-
-## MCP Generation Pattern
-
-JSON tool definition following Model Context Protocol (MCP) format.
-
-```json
-{
-  "name": "get_account_balances",
-  "description": "Retrieve current balances for all sub-accounts (checking, savings, credit).\n\nOperation Level: 1 (Read)\n\nUse when the user says: \"check my balance\", \"how much do I have\", \"account balance\", \"what's in my account\".",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "account_id": {
-        "type": "string",
-        "description": "The account to query. Format: ACC-XXXXXXXX.",
-        "pattern": "^ACC-[0-9]{8}$"
-      }
-    },
-    "required": ["account_id"]
-  }
-}
-```
-
-### MCP Tool with Structured Parameters
-
-```json
-{
-  "name": "transfer_funds",
-  "description": "Transfer funds between accounts.\n\nOperation Level: 4 (Financial - requires user confirmation)\n\nUse when the user says: \"transfer money\", \"send funds\", \"move money between accounts\".",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "amount": {
-        "type": "object",
-        "description": "Money object with value and currency.",
-        "properties": {
-          "value": {"type": "number", "minimum": 0.01, "description": "Amount to transfer."},
-          "currency": {"type": "string", "enum": ["USD", "EUR", "MXN"], "description": "ISO 4217 currency code."}
-        },
-        "required": ["value", "currency"]
-      },
-      "from_account": {
-        "type": "string",
-        "description": "Source account ID.",
-        "pattern": "^ACC-[0-9]{8}$"
-      },
-      "to_account": {
-        "type": "string",
-        "description": "Destination account ID.",
-        "pattern": "^ACC-[0-9]{8}$"
-      },
-      "idempotency_key": {
-        "type": "string",
-        "format": "uuid",
-        "description": "Unique key to prevent duplicate transfers. Generated if omitted."
-      }
-    },
-    "required": ["amount", "from_account", "to_account"]
-  }
-}
-```
+**Full reference**: [agent-native-principles.md — Catalog-Level Principles](references/agent-native-principles.md)
 
 ## Quality Checklist
 
-Before shipping a tool, verify against the full quality checklist:
-
-**[`references/tool-quality-checklist.md`](references/tool-quality-checklist.md)**
+Before shipping a tool, verify against the authoritative checklist: **[references/tool-quality-checklist.md](references/tool-quality-checklist.md)**
 
 Quick self-check:
 
 - [ ] Name describes domain operation, not CRUD (Principle 1)
-- [ ] Docstring includes trigger phrases (Principle 2)
+- [ ] Description says when to use AND when not to use (Principle 2)
 - [ ] Parameters use structured types with constraints (Principle 3)
-- [ ] Errors include code, message, remediation, and suggestions (Principle 4)
-- [ ] Terminology matches project-wide glossary (Principle 5)
-- [ ] Response includes data, formatted, available_actions, message_for_user (Principle 6)
-- [ ] available_actions lists logical next steps (Principle 7)
-- [ ] Operation level is declared and mapped to `interrupt_on` (Principle 8)
-- [ ] Level 3+ tools return pending_confirmation first (Principle 9)
-- [ ] Transactional tools accept idempotency_key (Principle 10)
-- [ ] No identity/credentials/tokens as parameters — injected by framework (Principle 11)
-
-Catalog-level (judgment, not part of the per-tool score):
-
-- [ ] Each tool is one unit of user intent — no over-fragmented or workflow-shaped tools (Granularity)
-- [ ] Tools grouped by domain, ≤10 per domain (Bounded Contexts)
-- [ ] Every UI action has a tool or a documented exclusion (Parity)
+- [ ] Errors include code, message, remediation (Principle 4)
+- [ ] Terminology matches the catalog glossary (Principle 5)
+- [ ] Response is high-signal: `data` + `formatted`, no duplicated representations (Principle 6)
+- [ ] `available_actions` only where they carry server state or a curated nudge (Principle 7)
+- [ ] Operation level declared; `interrupt_on` keyed by tool name with checkpointer (Principle 8)
+- [ ] Level 3+ tools stage and return `pending_confirmation` (Principle 9)
+- [ ] Idempotency key emitted by the server and echoed by the agent (Principle 10)
+- [ ] No caller identity, credentials, or tokens as parameters — framework-injected (Principle 11)
 
 ## Workflow
 
@@ -976,26 +198,22 @@ The tool design workflow follows a design-build-validate cycle:
                              └── fix issues ──┘
 ```
 
-1. **Design**: `/design-tools` creates a tool catalog from requirements or APIs
+1. **Design**: `/design-tools` creates a tool catalog from requirements or APIs (interactive)
 2. **Extend**: `/add-tool` adds individual tools matching existing patterns
-3. **Validate**: `/tool-status` checks quality scores against the 11 principles + eval coverage
+3. **Validate**: `/tool-status` shows the quality dashboard with per-principle scoring and eval coverage
 4. **Test**: `/design-evals` creates eval scenarios for your tools (EDD)
-
-## Commands
-
-- `/design-tools` — Design a complete AI-friendly tool catalog (interactive)
-- `/add-tool` — Add a single tool to an existing catalog
-- `/tool-status` — Tool quality dashboard with per-principle scoring and eval coverage
 
 ## References
 
-- **[AI-Friendly API Principles](references/ai-friendly-principles.md)** - Complete AI-friendly API design reference
-- **[Agent-Native Principles](references/agent-native-principles.md)** - Parity, granularity, composability, emergent capability
-- **[Tool Quality Checklist](references/tool-quality-checklist.md)** - Full quality verification checklist
-- **[Tool Examples](references/tool-examples.md)** - Real-world tool catalog with complete implementations
+Routing by task:
+
+- **[AI-Friendly API Principles](references/ai-friendly-principles.md)** — Canonical detail for Principles 1-5, plus MCP alignment (`annotations`, `outputSchema`, `isError`). Converting an OpenAPI/REST spec or writing MCP definitions → start here.
+- **[Agent-Native Principles](references/agent-native-principles.md)** — Canonical detail for Principles 6-11 (envelope, available actions, operation levels and confirmation channels by level, delegated confirmations, idempotency, secure parameters), plus granularity, bounded contexts and the UI-parity audit. Confirmation flows, `interrupt_on`, untrusted content → start here.
+- **[Tool Quality Checklist](references/tool-quality-checklist.md)** — Authoritative verification checklist.
+- **[Tool Examples](references/tool-examples.md)** — Two complete implementations: a Level 1 read tool and a Level 4 financial tool with staging, actionable errors, and confirmation flow.
 
 ## Related
 
-- **[Tool Patterns](../patterns/references/tool-patterns.md)** - Design patterns for tool granularity, naming, and security
-- **[API Cheatsheet](../patterns/references/api-cheatsheet.md)** - Quick reference for API-to-tool conversion
+- **[Tool Patterns](../patterns/references/tool-patterns.md)** — Design patterns for tool granularity, naming, and security (ToolRuntime)
+- **[API Cheatsheet](../patterns/references/api-cheatsheet.md)** — Quick reference for API-to-tool conversion
 - **[Evals](../evals/SKILL.md)** — Test Operation Level flows (`pending_confirmation`, `interrupt_on`), idempotency, error response suggestions, and tool graph navigation

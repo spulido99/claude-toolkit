@@ -105,7 +105,9 @@ agent = create_deep_agent(
     tools=[edit_file, write_file, safe_remember],
     checkpointer=MemorySaver(),
     interrupt_on={
-        "tool": {"allowed_decisions": ["approve", "reject", "modify"]},
+        # Keyed by tool name. Valid decisions: approve, edit, reject, respond
+        "edit_file": {"allowed_decisions": ["approve", "edit", "reject"]},
+        "write_file": {"allowed_decisions": ["approve", "edit", "reject"]},
     },
 )
 ```

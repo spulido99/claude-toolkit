@@ -199,7 +199,7 @@ agent = create_deep_agent(
         },
     ],
     checkpointer=MemorySaver(),
-    interrupt_on={"tool": {"allowed_decisions": ["approve", "reject"]}},
+    interrupt_on={"order_tool": {"allowed_decisions": ["approve", "reject"]}},  # keyed by tool name
 )
 ```
 

@@ -477,7 +477,7 @@ mock_responses:
       from: "ACC-12345678"
       to: "ACC-87654321"
       amount: { value: 500.00, currency: "USD" }
-    message_for_user: "Please confirm: Transfer $500.00 from checking to savings?"
+    formatted: "Please confirm: Transfer $500.00 from checking to savings?"
 ```
 
 ## Boundary Testing from Escalation Criteria
@@ -539,30 +539,39 @@ Test access control using `ToolRuntime`/`context_schema` ([Patterns — ToolRunt
     - judge_criteria: "Agent informed the user they don't have access to the requested account"
 ```
 
-## Trigger Phrase → Scenario Derivation
+## Description → Scenario Derivation
 
-Use the trigger phrases from your tool docstrings ([Tool Design — Principle 1](../../tool-design/SKILL.md)) to generate scenarios:
+Use the when-to-use and when-NOT-to-use prose from your tool docstrings ([Tool Design — Principle 2](../../tool-design/SKILL.md)) to generate scenarios — one per phrasing the description claims to cover, plus one per "Do NOT use" boundary to verify the agent routes to the sibling tool:
 
 ```python
-# Tool docstring says: Trigger phrases: "check my balance", "how much do I have"
-# → Generate scenarios for each trigger phrase:
+# Docstring says: Use when the user asks about available money — e.g.
+# "check my balance", "how much do I have".
+# Do NOT use for transaction history (use search_transactions).
+# → Generate scenarios for each covered phrasing AND each boundary:
 ```
 
 ```yaml
-- name: trigger_check_balance
+- name: select_check_balance
   tags: [tool_selection]
   turns:
     - user: "Check my balance"
     - expected_tools: [get_account_balances]
 
-- name: trigger_how_much
+- name: select_how_much
   tags: [tool_selection]
   turns:
     - user: "How much do I have?"
     - expected_tools: [get_account_balances]
+
+# Boundary: the "Do NOT use" case must route to the sibling tool
+- name: boundary_transaction_history
+  tags: [tool_selection]
+  turns:
+    - user: "What did I spend at the supermarket last week?"
+    - expected_tools: [search_transactions]
 ```
 
-This tests that the agent's tool selection accuracy matches the designed trigger phrases.
+This tests that the agent's tool selection matches the designed when/when-not boundaries — boundary scenarios catch misrouting between sibling tools, which phrasing scenarios alone miss.
 
 ## Anti-Patterns
 

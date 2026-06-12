@@ -457,7 +457,10 @@ agent = create_deep_agent(
     tools=[process_refund, delete_account, change_subscription, ...],
     checkpointer=MemorySaver(),
     interrupt_on={
-        "tool": {"allowed_decisions": ["approve", "reject", "modify"]},
+        # Keyed by tool name. Valid decisions: approve, edit, reject, respond
+        "process_refund": {"allowed_decisions": ["approve", "edit", "reject"]},
+        "delete_account": {"allowed_decisions": ["approve", "reject"]},
+        "change_subscription": {"allowed_decisions": ["approve", "edit", "reject"]},
     },
 )
 # Agent can do anything, but sensitive actions pause for human approval
@@ -513,7 +516,8 @@ agent = create_deep_agent(
     ],
     backend=FilesystemBackend(root_dir="./workspace"),
     skills=["./skills/"],
-    interrupt_on={"tool": {"allowed_decisions": ["approve", "reject"]}},
+    checkpointer=MemorySaver(),  # required for interrupts
+    interrupt_on={"write_doc": {"allowed_decisions": ["approve", "reject"]}},  # keyed by tool name
 )
 ```
 
@@ -542,15 +546,13 @@ def get_balance(account_id: str) -> dict:
 def get_account_balances(include_details: bool = False) -> dict:
     """Retrieve balances for all accounts.
 
-    Use when the user says:
-    - 'check my balance'
-    - 'how much do I have'
+    Use when the user asks about available money — e.g. 'check my balance',
+    'how much do I have'. Do NOT use for transaction history
+    (use search_transactions).
     """
     return {
         "data": {"balance": 5000000, "currency": "PYG"},
-        "formatted": "Available balance: Gs. 5,000,000",
-        "available_actions": ["get_transactions", "transfer_funds"],
-        "message_for_user": "Your balance is Gs. 5,000,000"
+        "formatted": "Available balance: Gs. 5,000,000"
     }
 ```
 

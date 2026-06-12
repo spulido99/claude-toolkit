@@ -48,11 +48,11 @@ If `--from-api` was provided:
 2. **Extract endpoint**: Find the specified endpoint path and method
 3. **Map to tool**: Apply the 11 principles to convert the endpoint:
    - Semantic name from path + operation (not HTTP method)
-   - Trigger phrases from description
+   - When-to-use / when-not-to-use boundaries from description
    - Structured parameters from schema
-   - Operation level from method (GET→L1, POST→L2, PUT/PATCH→L3, DELETE→L5)
+   - Operation level from **impact, not HTTP method**: money movement → L4 regardless of verb; irreversible destruction → L5; DELETE is typically L3-L5 depending on reversibility; reads → L1
 4. **Show proposed mapping**: Present the tool spec for approval
-5. **Ask for adjustments**: Domain assignment, name changes, additional trigger phrases
+5. **Ask for adjustments**: Domain assignment, name changes, operation level, description refinements
 6. **Generate code**: Match existing catalog format (Python `@tool` or MCP JSON)
 
 ### Step 3b: Interactive Mode

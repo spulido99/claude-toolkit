@@ -215,9 +215,9 @@ agent = create_deep_agent(
     tools=[delete_database, read_database],
     checkpointer=MemorySaver(),
     interrupt_on={
-        "tool": {
-            "allowed_decisions": ["approve", "reject", "modify"],
-        }
+        # Keyed by tool name. Valid decisions: approve, edit, reject, respond
+        "delete_database": {"allowed_decisions": ["approve", "reject"]},
+        "read_database": False,  # no pause for reads
     },
 )
 
@@ -438,7 +438,7 @@ agent = create_deep_agent(
     context_schema=UserContext,
     checkpointer=MemorySaver(),
     interrupt_on={
-        "tool": {"allowed_decisions": ["approve", "reject"]},
+        "delete_user_data": {"allowed_decisions": ["approve", "reject"]},  # keyed by tool name
     },
 )
 

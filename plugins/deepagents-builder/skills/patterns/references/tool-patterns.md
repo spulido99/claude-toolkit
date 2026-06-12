@@ -19,18 +19,16 @@ Tools should return structured responses with navigation:
 def get_account_balances(include_details: bool = False) -> dict:
     """Retrieve balances for all accounts.
 
-    Use when the user says:
-    - 'check my balance'
-    - 'how much do I have'
+    Use when the user asks about available money — e.g. 'check my balance',
+    'how much do I have'. Do NOT use for transaction history
+    (use search_transactions).
 
     Args:
         include_details: Include account number and type
     """
     return {
         "data": [...],
-        "formatted": "Your accounts:\n  - PYG Account: Gs. 5,000,000",
-        "available_actions": ["get_transactions", "transfer_funds"],
-        "message_for_user": "Your accounts:\n  - PYG Account: Gs. 5,000,000"
+        "formatted": "Your accounts:\n  - PYG Account: Gs. 5,000,000"
     }
 ```
 
@@ -527,8 +525,10 @@ agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You manage records.",
     tools=tools_readonly + tools_write,
+    checkpointer=MemorySaver(),  # required for interrupts
+    # Keyed by tool name. Valid decisions: approve, edit, reject, respond
     interrupt_on={
-        "tool": {"allowed_decisions": ["approve", "reject", "modify"]},
+        t.name: {"allowed_decisions": ["approve", "edit", "reject"]} for t in tools_write
     },
 )
 ```

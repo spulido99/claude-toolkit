@@ -1,129 +1,115 @@
 # Tool Examples
 
-Real-world examples from a 32-tool banking/fintech catalog. Each example demonstrates multiple AI-Friendly Tool Design principles in a complete, production-ready tool definition.
+Two canonical examples from a banking/fintech catalog: a **Level 1 read tool** and a **Level 4 financial tool**. Together they demonstrate the 11 principles in complete, production-shaped implementations. (Helper functions like `fetch_user_accounts` or `stage_transfer` represent your backend — note none of them take the caller's identity as a tool parameter: user scoping comes from the framework context, per Principle 11.)
 
 ---
 
-## Example 1: `get_account_balances`
+## Example 1: `get_account_balances` — Level 1 (Read)
 
-**Level 1 (Read) | Domain: accounts | No confirmation required**
+**Domain: accounts | No confirmation required**
 
 ```python
+from datetime import datetime, timezone
 from langchain.tools import tool
-from typing import Optional
 
 
 @tool
-def get_account_balances(include_details: bool = False) -> dict:
+def get_account_balances(account_id: str = None, include_details: bool = False) -> dict:
     """
-    Retrieve balances for all user accounts.
-    Returns available balance, book balance, and currency for each account.
+    Retrieve balances for user accounts: available balance, book balance, and currency.
 
     Operation Level: 1 (Read - no side effects)
 
-    Use when the user says:
-    - 'check my balance'
-    - 'how much do I have'
-    - 'how much money do I have'
-    - 'see my accounts'
-    - 'account balance'
+    Use when the user asks about money available in their accounts —
+    e.g. 'check my balance', 'how much do I have', 'see my accounts'.
+    Do NOT use for transaction history (use search_transactions) or
+    investment positions (use get_investments).
 
     Args:
-        include_details: If true, include account number and type. Default: false
+        account_id: Account to query. Format: ACC-XXXXXXXX.
+                    If omitted, returns balances for all user accounts.
+        include_details: If true, include account type. Default: false
 
     Returns:
-        Balances by account with available_actions for next steps.
+        Standard envelope: balances per account in `data`, display text in `formatted`.
     """
     # --- Implementation ---
-    accounts = fetch_user_accounts()
-    balances = [get_balance(acc) for acc in accounts]
+    accounts = fetch_user_accounts(account_id)
 
-    # --- Build response ---
+    # --- Build response data (Money objects, consistent terminology) ---
     data = []
-    for acc, bal in zip(accounts, balances):
+    for acc in accounts:
+        bal = get_balance(acc)
         entry = {
-            "id": acc["id"],
+            "account_id": acc["id"],
             "currency": bal["currency"],
-            "available_balance": bal["available"],
-            "book_balance": bal["book"]
+            "available_balance": {"value": bal["available"], "currency": bal["currency"]},
+            "book_balance": {"value": bal["book"], "currency": bal["currency"]},
         }
         if include_details:
-            entry["account_number"] = acc["number"]
             entry["account_type"] = acc["type"]
         data.append(entry)
 
-    total_pyg = sum(b["available"] for b in balances if b["currency"] == "PYG")
+    total_pyg = sum(
+        e["available_balance"]["value"] for e in data if e["currency"] == "PYG"
+    )
 
-    return {
+    response = {
         "status": "success",
         "data": data,
         "formatted": (
             "Your accounts:\n"
             + "\n".join(
-                f"  - {d['currency']} Account: Gs. {d['available_balance']:,.0f} available"
-                for d in data
+                f"  - {e['currency']} Account: Gs. {e['available_balance']['value']:,.0f} available"
+                for e in data
             )
             + f"\n  Total PYG: Gs. {total_pyg:,.0f}"
-        ),
-        "formatted_spoken": (
-            f"You have {len(data)} accounts. "
-            f"Your total available balance in guaranies is {total_pyg:,.0f} guaranies."
-        ),
-        "available_actions": [
-            {
-                "tool": "get_account_details",
-                "params": {"account_id": data[0]["id"]},
-                "label": "View account details",
-                "description": "Full account info: holder, opening date, settings"
-            },
-            {
-                "tool": "get_transactions",
-                "params": {"account_id": data[0]["id"], "limit": 10},
-                "label": "View recent transactions",
-                "description": "Last 10 transactions on this account"
-            },
-            {
-                "tool": "transfer_funds",
-                "params": {"from_account": data[0]["id"]},
-                "label": "Transfer funds",
-                "description": "Transfer money from this account"
-            }
-        ],
-        "message_for_user": (
-            "Your accounts:\n"
-            + "\n".join(
-                f"  - {d['currency']} Account: Gs. {d['available_balance']:,.0f} available"
-                for d in data
-            )
-        ),
+        ) if data else "You have no active accounts.",
         "metadata": {
-            "as_of": datetime.utcnow().isoformat(),
-            "cache_ttl_seconds": 60
-        }
+            "as_of": datetime.now(timezone.utc).isoformat(),
+            "cache_ttl_seconds": 60,
+        },
     }
+
+    # available_actions only when there is server state the catalog can't
+    # express (Principle 7). A static "you could transfer or search" menu
+    # is omitted — the agent already has the full catalog.
+    pending = get_pending_operations(account_id)
+    if pending:
+        response["available_actions"] = [
+            {
+                "tool": "cancel_pending_operation",
+                "params": {"operation_id": op["id"]},
+                "label": f"Cancel pending {op['type']} ({op['summary']})",
+            }
+            for op in pending
+        ]
+
+    return response
 ```
 
 ### Principles Demonstrated
 
 | Principle | How |
 |-----------|-----|
-| **Semantic Clarity** | Name `get_account_balances` describes exact domain operation |
-| **Natural Language Compatibility** | Trigger phrases matching real user queries |
-| **Rich Response Semantics** | `formatted`, `formatted_spoken`, `message_for_user`, and `data` all present |
-| **Available Actions** | Three contextual next steps with pre-filled params |
-| **Operation Level** | Declared as Level 1 (Read) — no confirmation needed |
-| **Sensible Defaults** | `include_details=False` keeps response lean by default |
+| **1 — Semantic Clarity** | Name `get_account_balances` describes the exact domain operation |
+| **2 — Natural Language Compatibility** | When-to-use phrasings AND explicit "Do NOT use" boundaries with sibling tools |
+| **3 — Structured Types** | Balances as Money objects `{"value": N, "currency": "X"}` |
+| **5 — Consistent Terminology** | `account_id`, `include_details` — catalog-standard names |
+| **6 — Rich Response Semantics** | High-signal: `data` + `formatted`, no duplicated representations |
+| **7 — Available Actions** | Included only when carrying server state (pending operations); omitted otherwise |
+| **8 — Operation Level** | Declared as Level 1 (Read) — no confirmation needed |
 
 ---
 
-## Example 2: `transfer_funds`
+## Example 2: `transfer_funds` — Level 4 (Financial)
 
-**Level 4 (Financial) | Domain: transfers | Requires user confirmation**
+**Domain: transfers | Stages and returns pending_confirmation — never executes directly**
 
 ```python
+from datetime import datetime, timedelta, timezone
+from typing import Literal
 from langchain.tools import tool
-from typing import Optional
-import uuid
 
 
 @tool
@@ -131,70 +117,111 @@ def transfer_funds(
     amount: dict,
     from_account: str,
     to_account: str,
+    transfer_type: Literal["own_accounts", "third_party"] = "own_accounts",
     description: str = "",
-    idempotency_key: str = None
+    idempotency_key: str = None,
 ) -> dict:
     """
     Transfer funds between user accounts or to third parties.
-    Requires user confirmation before executing.
+    Stages the transfer and returns a confirmation request — never executes directly.
 
     Operation Level: 4 (Financial - requires user confirmation)
 
-    Use when the user says:
-    - 'transfer money'
-    - 'send funds'
-    - 'move funds'
-    - 'send money to [name]'
-    - 'move money between accounts'
+    Use when the user wants to move money — e.g. 'transfer money',
+    'send funds', 'send money to [name]'.
+    Do NOT use for credit card payments (use pay_credit_card) or
+    scheduled/recurring transfers (use schedule_recurring_transfer).
 
     Args:
         amount: Amount to transfer. Format: {"value": decimal, "currency": "PYG"}.
                 Example: {"value": 500000, "currency": "PYG"}
         from_account: Source account ID. Format: ACC-XXXXXXXX.
         to_account: Destination account ID. Format: ACC-XXXXXXXX.
-        description: Transfer concept or description. Optional.
-        idempotency_key: Unique UUID key to prevent duplicates.
-                         If omitted, one is generated automatically.
-                         If reused, returns the original result.
+        transfer_type: "own_accounts" (between the user's accounts) or
+                       "third_party" (to another person). Default: "own_accounts".
+        description: Transfer concept. Optional. Stored and displayed as free
+                     text — never interpreted.
+        idempotency_key: Only pass the key returned by a previous
+                         pending_confirmation (safe retry). Omit on first
+                         call — the tool generates one and returns it.
 
     Returns:
-        A pending_confirmation status with details for user approval.
+        pending_confirmation with details, or an actionable error.
     """
-    # --- Generate idempotency key if not provided ---
-    key = idempotency_key or str(uuid.uuid4())
+    # --- Idempotency (Principle 10): server-generated key, echoed by the agent ---
+    key = idempotency_key or new_server_key()
 
-    # --- Check for duplicate ---
     existing = lookup_by_idempotency_key(key)
     if existing:
         return {
             "status": "already_processed",
             "data": existing,
-            "message_for_user": (
-                f"This transfer has already been processed. "
+            "formatted": (
+                f"This transfer was already processed. "
                 f"Reference: {existing['reference']}."
-            )
+            ),
         }
 
-    # --- Validate inputs ---
-    validation = validate_transfer(amount, from_account, to_account)
-    if not validation["valid"]:
+    # --- Validation: concrete, actionable error cases (Principle 4) ---
+    if amount["value"] < MINIMUM_TRANSFER:
         return {
             "status": "error",
             "error": {
-                "code": validation["error_code"],
-                "message": validation["error_message"],
-                "remediation": validation["remediation"],
-                "suggestions": validation.get("suggestions", [])
-            }
+                "code": "AMOUNT_BELOW_MINIMUM",
+                "message": (
+                    f"The minimum transfer is Gs. {MINIMUM_TRANSFER:,.0f}. "
+                    f"You tried Gs. {amount['value']:,.0f}."
+                ),
+                "remediation": "Ask the user for an amount at or above the minimum.",
+                "suggestions": [],
+            },
         }
 
-    # --- Fetch account names for display ---
+    if not account_exists(to_account):
+        return {
+            "status": "error",
+            "error": {
+                "code": "ACCOUNT_NOT_FOUND",
+                "message": f"No account found with ID '{to_account}'.",
+                "remediation": "Verify the account ID or search the recipient by name.",
+                "suggestions": [
+                    {
+                        "tool": "find_contact",
+                        "reason": "Search the recipient by name to get the correct account ID",
+                        "params": {"name": "<recipient name>"},
+                    }
+                ],
+            },
+        }
+
+    balance = get_available_balance(from_account)
+    if balance["available"] < amount["value"]:
+        return {
+            "status": "error",
+            "error": {
+                "code": "INSUFFICIENT_FUNDS",
+                "message": (
+                    f"Insufficient funds. Available: Gs. {balance['available']:,.0f}. "
+                    f"Required: Gs. {amount['value']:,.0f}."
+                ),
+                "remediation": "Reduce the amount or use another account with sufficient funds.",
+                "suggestions": [
+                    {
+                        "tool": "get_account_balances",
+                        "reason": "View balances for all accounts",
+                        "params": {},
+                    }
+                ],
+            },
+        }
+
+    # --- Stage the transfer (Principle 9): do NOT execute ---
     from_name = get_account_name(from_account)
     to_name = get_account_name(to_account)
-    fee = calculate_transfer_fee(amount, from_account, to_account)
+    fee = calculate_transfer_fee(amount, transfer_type)
+    transfer_id = stage_transfer(amount, from_account, to_account, key)
 
-    # --- Return pending confirmation (do NOT execute) ---
-    transfer_id = generate_transfer_id()
+    fee_text = "No fee." if fee["value"] == 0 else f"Fee: Gs. {fee['value']:,.0f}."
 
     return {
         "status": "pending_confirmation",
@@ -212,31 +239,27 @@ def transfer_funds(
                 "to_account_name": to_name,
                 "description": description,
                 "estimated_arrival": calculate_arrival_date(),
-                "fee": fee
+                "fee": fee,
             },
+            # Server state the catalog can't express — exactly what
+            # available_actions / confirmation_method exist for (Principle 7)
             "confirmation_method": {
                 "tool": "confirm_transfer",
-                "params": {
-                    "transfer_id": transfer_id,
-                    "idempotency_key": key
-                }
+                "params": {"transfer_id": transfer_id, "idempotency_key": key},
             },
             "cancel_method": {
                 "tool": "cancel_pending_operation",
-                "params": {"operation_id": transfer_id}
+                "params": {"operation_id": transfer_id},
             },
-            "expires_at": (datetime.utcnow() + timedelta(minutes=30)).isoformat()
+            "expires_at": (
+                datetime.now(timezone.utc) + timedelta(minutes=30)
+            ).isoformat(),
         },
-        "message_for_user": (
-            f"Transfer Gs. {amount['value']:,.0f} "
-            f"from {from_name} to {to_name}. "
-            f"{'No fee. ' if fee['value'] == 0 else f'Fee: Gs. {fee[\"value\"]:,.0f}. '}"
-            f"Shall I proceed?"
+        "formatted": (
+            f"Transfer Gs. {amount['value']:,.0f} from {from_name} to {to_name}. "
+            f"{fee_text} Shall I proceed?"
         ),
-        "metadata": {
-            "idempotency_key": key,
-            "transfer_id": transfer_id
-        }
+        "metadata": {"idempotency_key": key, "transfer_id": transfer_id},
     }
 ```
 
@@ -244,352 +267,34 @@ def transfer_funds(
 
 | Principle | How |
 |-----------|-----|
-| **Semantic Clarity** | `transfer_funds` — clear business operation |
-| **Structured Types** | `amount` as `{"value": N, "currency": "X"}` — not a bare float |
-| **Delegated Confirmation** | Returns `pending_confirmation` — does NOT execute directly |
-| **Idempotency** | `idempotency_key` parameter with duplicate detection |
-| **Actionable Errors** | Validation errors include `code`, `message`, `remediation`, `suggestions` |
-| **Operation Level** | Declared as Level 4 (Financial) in docstring |
-| **Trigger Phrases** | Trigger phrases matching real user language |
-| **Confirmation Flow** | Includes `confirmation_method` and `cancel_method` tools |
-
----
-
-## Example 3: `get_investments`
-
-**Level 1 (Read) | Domain: investments | No confirmation required**
-
-```python
-from langchain.tools import tool
-from typing import Optional
-
-
-@tool
-def get_investments(include_projections: bool = False) -> dict:
-    """
-    Retrieve the user's active investments.
-    Returns investment type, amount, rate, term, and maturity date.
-
-    Operation Level: 1 (Read - no side effects)
-
-    Use when the user says:
-    - 'my investments'
-    - 'how much do I have invested'
-    - 'see my fixed deposits'
-    - 'investment returns'
-    - 'when do my investments mature'
-
-    Args:
-        include_projections: If true, include projected earnings at maturity
-                            and effective annual rate. Default: false
-
-    Returns:
-        List of active investments with details and available_actions.
-    """
-    # --- Implementation ---
-    investments = fetch_user_investments()
-
-    data = []
-    for inv in investments:
-        entry = {
-            "id": inv["id"],
-            "type": inv["type"],
-            "currency": inv["currency"],
-            "principal": {"value": inv["principal"], "currency": inv["currency"]},
-            "annual_rate": inv["rate"],
-            "term_days": inv["term_days"],
-            "start_date": inv["start_date"],
-            "maturity_date": inv["maturity_date"],
-            "auto_renew": inv["auto_renew"],
-            "status": inv["status"]
-        }
-        if include_projections:
-            entry["projected_earnings"] = {
-                "value": calculate_earnings(inv),
-                "currency": inv["currency"]
-            }
-            entry["effective_annual_rate"] = calculate_effective_rate(inv)
-            entry["days_remaining"] = days_until_maturity(inv)
-        data.append(entry)
-
-    total_invested = sum(d["principal"]["value"] for d in data)
-
-    # --- Build formatted output ---
-    lines = ["Your active investments:"]
-    for d in data:
-        line = (
-            f"  - {d['type']}: Gs. {d['principal']['value']:,.0f} "
-            f"at {d['annual_rate']}% annual, "
-            f"matures {d['maturity_date']}"
-        )
-        if include_projections and "projected_earnings" in d:
-            line += f" (projected earnings: Gs. {d['projected_earnings']['value']:,.0f})"
-        lines.append(line)
-    lines.append(f"  Total invested: Gs. {total_invested:,.0f}")
-
-    return {
-        "status": "success",
-        "data": data,
-        "formatted": "\n".join(lines),
-        "formatted_spoken": (
-            f"You have {len(data)} active investments "
-            f"totaling {total_invested:,.0f} guaranies. "
-            + (
-                f"The next one matures on {data[0]['maturity_date']}."
-                if data else ""
-            )
-        ),
-        "available_actions": [
-            {
-                "tool": "get_investment_details",
-                "params": {"investment_id": data[0]["id"]} if data else {},
-                "label": "View investment details",
-                "description": "Full information including performance history"
-            },
-            {
-                "tool": "create_investment",
-                "params": {},
-                "label": "Create new investment",
-                "description": "Create a new fixed deposit or investment"
-            },
-            {
-                "tool": "simulate_investment",
-                "params": {},
-                "label": "Simulate investment",
-                "description": "Calculate projected returns before investing"
-            }
-        ],
-        "message_for_user": "\n".join(lines),
-        "metadata": {
-            "as_of": datetime.utcnow().isoformat(),
-            "cache_ttl_seconds": 300
-        }
-    }
-```
-
-### Principles Demonstrated
-
-| Principle | How |
-|-----------|-----|
-| **Semantic Clarity** | `get_investments` — domain-specific, not `get_resources` |
-| **Sensible Defaults** | `include_projections=False` keeps response lean; user can opt in |
-| **Rich Response Semantics** | `formatted`, `formatted_spoken`, and `data` all present with different representations |
-| **Available Actions** | Three next steps: details, create new, simulate — covering view/action/plan |
-| **Structured Types** | `principal` as Money object `{"value": N, "currency": "X"}` |
-| **Natural Language** | Trigger phrases: "my investments", "how much do I have invested" |
-| **Metadata** | Includes `cache_ttl_seconds: 300` (investment data changes less frequently) |
-
----
-
-## Example 4: `create_investment`
-
-**Level 4 (Financial) | Domain: investments | Requires user confirmation**
-
-```python
-from langchain.tools import tool
-from typing import Optional, Literal
-import uuid
-
-
-@tool
-def create_investment(
-    amount: dict,
-    from_account: str,
-    term_days: int,
-    auto_renew: bool = True,
-    investment_type: Literal["fixed_deposit", "cd"] = "fixed_deposit",
-    idempotency_key: str = None
-) -> dict:
-    """
-    Create a new investment (fixed deposit or CD) using funds from an account.
-    Requires user confirmation before executing.
-
-    Operation Level: 4 (Financial - requires user confirmation)
-
-    Use when the user says:
-    - 'I want to invest'
-    - 'create a fixed deposit'
-    - 'make an investment'
-    - 'put money in a fixed deposit'
-    - 'invest [amount] for [term] days'
-
-    Args:
-        amount: Amount to invest. Format: {"value": decimal, "currency": "PYG"}.
-                Example: {"value": 10000000, "currency": "PYG"}.
-                Minimum: {"value": 1000000, "currency": "PYG"}.
-        from_account: Source account ID for funds. Format: ACC-XXXXXXXX.
-        term_days: Term in days. Allowed values: 30, 60, 90, 180, 360.
-        auto_renew: If true, investment auto-renews at maturity.
-                    Default: true.
-        investment_type: Investment type. "fixed_deposit" or "cd" (Certificate of
-                        Deposit). Default: "fixed_deposit".
-        idempotency_key: Unique UUID key to prevent duplicates.
-                         If omitted, one is generated automatically.
-
-    Returns:
-        A pending_confirmation status with proposed investment details.
-    """
-    # --- Generate idempotency key if not provided ---
-    key = idempotency_key or str(uuid.uuid4())
-
-    # --- Check for duplicate ---
-    existing = lookup_by_idempotency_key(key)
-    if existing:
-        return {
-            "status": "already_processed",
-            "data": existing,
-            "message_for_user": (
-                f"This investment has already been created. "
-                f"Reference: {existing['reference']}."
-            )
-        }
-
-    # --- Validate ---
-    if amount["value"] < 1000000:
-        return {
-            "status": "error",
-            "error": {
-                "code": "MINIMUM_AMOUNT",
-                "message": f"The minimum investment amount is Gs. 1,000,000. You tried with Gs. {amount['value']:,.0f}.",
-                "remediation": "Enter an amount equal to or greater than Gs. 1,000,000.",
-                "suggestions": [
-                    {
-                        "tool": "simulate_investment",
-                        "reason": "Simulate with a higher amount to see returns",
-                        "params": {"amount": {"value": 1000000, "currency": "PYG"}, "term_days": term_days}
-                    }
-                ]
-            }
-        }
-
-    if term_days not in [30, 60, 90, 180, 360]:
-        return {
-            "status": "error",
-            "error": {
-                "code": "INVALID_TERM",
-                "message": f"Term of {term_days} days not available. Valid terms: 30, 60, 90, 180, 360.",
-                "remediation": "Choose one of the available terms.",
-                "suggestions": []
-            }
-        }
-
-    # --- Calculate rate and projections ---
-    rate = get_investment_rate(investment_type, term_days, amount)
-    projected_earnings = calculate_projected_earnings(amount, rate, term_days)
-    maturity_date = calculate_maturity_date(term_days)
-    from_name = get_account_name(from_account)
-    balance = get_available_balance(from_account)
-
-    # --- Validate sufficient funds ---
-    if balance["available"] < amount["value"]:
-        return {
-            "status": "error",
-            "error": {
-                "code": "INSUFFICIENT_FUNDS",
-                "message": (
-                    f"Insufficient funds. Available: Gs. {balance['available']:,.0f}. "
-                    f"Required: Gs. {amount['value']:,.0f}."
-                ),
-                "remediation": "Reduce the amount or use another account with sufficient funds.",
-                "suggestions": [
-                    {
-                        "tool": "get_account_balances",
-                        "reason": "View balances for all accounts",
-                        "params": {}
-                    }
-                ]
-            }
-        }
-
-    # --- Return pending confirmation (do NOT execute) ---
-    investment_id = generate_investment_id()
-
-    return {
-        "status": "pending_confirmation",
-        "confirmation": {
-            "operation": "create_investment",
-            "summary": (
-                f"Create {investment_type} for Gs. {amount['value']:,.0f} "
-                f"at {term_days} days at {rate}% annual"
-            ),
-            "details": {
-                "investment_type": investment_type,
-                "amount": amount,
-                "from_account": from_account,
-                "from_account_name": from_name,
-                "term_days": term_days,
-                "annual_rate": rate,
-                "projected_earnings": {
-                    "value": projected_earnings,
-                    "currency": amount["currency"]
-                },
-                "maturity_date": maturity_date,
-                "auto_renew": auto_renew
-            },
-            "confirmation_method": {
-                "tool": "confirm_investment",
-                "params": {
-                    "investment_id": investment_id,
-                    "idempotency_key": key
-                }
-            },
-            "cancel_method": {
-                "tool": "cancel_pending_operation",
-                "params": {"operation_id": investment_id}
-            },
-            "expires_at": (datetime.utcnow() + timedelta(minutes=30)).isoformat()
-        },
-        "message_for_user": (
-            f"Create {investment_type} for Gs. {amount['value']:,.0f} "
-            f"at {term_days} days.\n"
-            f"Rate: {rate}% annual.\n"
-            f"Estimated earnings: Gs. {projected_earnings:,.0f}.\n"
-            f"Maturity: {maturity_date}.\n"
-            f"Auto-renewal: {'Yes' if auto_renew else 'No'}.\n"
-            f"Funds from: {from_name}.\n"
-            f"Shall I proceed?"
-        ),
-        "metadata": {
-            "idempotency_key": key,
-            "investment_id": investment_id
-        }
-    }
-```
-
-### Principles Demonstrated
-
-| Principle | How |
-|-----------|-----|
-| **Structured Types** | `amount` as Money `{"value": N, "currency": "X"}`, `projected_earnings` also as Money |
-| **Delegated Confirmation** | Returns `pending_confirmation` — does NOT create investment directly |
-| **Idempotency** | `idempotency_key` with duplicate detection and `already_processed` response |
-| **Actionable Errors** | Three distinct error cases (minimum amount, invalid term, insufficient funds) each with `code`, `message`, `remediation`, `suggestions` |
-| **Documented Enums** | `investment_type: Literal["fixed_deposit", "cd"]` and `term_days` constraints documented |
-| **Operation Level** | Declared as Level 4 (Financial) requiring user confirmation |
-| **Confirmation Flow** | `confirmation_method` with `confirm_investment` and `cancel_method` with `cancel_pending_operation` |
-| **Rich Display** | `message_for_user` with multi-line summary showing rate, earnings, maturity, and auto-renewal |
+| **1 — Semantic Clarity** | `transfer_funds` — clear business operation |
+| **2 — Natural Language Compatibility** | When-to-use phrasings + "Do NOT use" boundaries (`pay_credit_card`, `schedule_recurring_transfer`) |
+| **3 — Structured Types** | `amount` as Money object; `transfer_type` as `Literal` enum |
+| **4 — Actionable Errors** | Three concrete error cases, each with `code`, `message`, `remediation`, `suggestions` |
+| **6 — Rich Response Semantics** | `description` treated as free text, never interpreted (untrusted content rule) |
+| **7 — Available Actions** | `confirmation_method` / `cancel_method` carry server state (transfer_id, key, expiry) |
+| **8 — Operation Level** | Declared as Level 4 (Financial) in the docstring |
+| **9 — Delegated Confirmations** | Stages the operation; returns `pending_confirmation` — never executes directly |
+| **10 — Idempotency** | Server-generated key, returned in `confirmation_method.params` for the agent to echo |
 
 ---
 
 ## Pattern Summary
 
-Across all 4 examples, observe these consistent patterns:
-
-| Pattern | Applied In |
-|---------|-----------|
-| Standard response envelope (`data`, `formatted`, `available_actions`, `message_for_user`) | All examples |
-| Operation level in docstring | All examples |
-| Trigger phrases in user's language | All examples |
-| Money as `{"value": N, "currency": "X"}` | Examples 2, 3, 4 |
-| `pending_confirmation` for Level 4 | Examples 2, 4 |
-| `idempotency_key` for transactional tools | Examples 2, 4 |
-| Actionable error responses | Examples 2, 4 |
-| `formatted_spoken` for voice | Examples 1, 3 |
-| Sensible defaults | All examples |
-| Dynamic `available_actions` | All examples |
+| Pattern | Example 1 (Level 1) | Example 2 (Level 4) |
+|---------|--------------------|---------------------|
+| High-signal envelope (`data` + `formatted`) | Yes | Yes |
+| Operation level in docstring | Yes | Yes |
+| When-to-use + Do-NOT-use boundaries | Yes | Yes |
+| Money as `{"value": N, "currency": "X"}` | Yes | Yes |
+| Contextual `available_actions` (state-only) | Pending operations | Confirmation/cancel methods |
+| Staging + `pending_confirmation` | — | Yes |
+| Server-emitted `idempotency_key` | — | Yes |
+| Actionable error responses | — | Yes (3 cases) |
+| `Literal` enums for constrained params | — | Yes |
 
 ### When to Use Each Pattern
 
-- **Level 1 tools** (Examples 1, 3): Focus on rich formatting and available actions. No confirmation needed.
-- **Level 4 tools** (Examples 2, 4): Focus on validation, confirmation flow, and idempotency. Never execute directly.
-- **All tools**: Always include trigger phrases, operation level, and standard response envelope.
+- **Level 1-2 tools** (Example 1): lean response, opt-in detail flags, `available_actions` only for genuine server state. No confirmation, no idempotency key.
+- **Level 3+ tools** (Example 2): validate with actionable errors, stage the operation, return `pending_confirmation` with server-issued idempotency key. Never execute directly.
+- **All tools**: operation level in the docstring, when/when-not boundaries, structured types, catalog-consistent terminology.
