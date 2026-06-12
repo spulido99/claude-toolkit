@@ -762,3 +762,13 @@ Verifica cada tool antes de publicarla en el servidor MCP.
 | 9 | Confirmaciones delegadas | Nivel 3+: preparar → `pending_confirmation` → ejecutar |
 | 10 | Idempotencia | Nivel 3+ acepta `idempotency_key`; colisión = resultado original |
 | 11 | Parámetros seguros | Identidad y credenciales jamás en `inputSchema` — se inyectan server-side |
+
+---
+
+## Siguiente paso: ver los 11 principios aplicados de punta a punta
+
+Esta guía explica los principios uno por uno. Para verlos **trabajando juntos** sobre un caso real — tomar una API REST de préstamos, exponerla mal (como saldría por instinto), ver por qué se rompe con un agente y reconstruirla principio por principio — lee el walkthrough:
+
+**→ [Walkthrough: de una API REST a tools MCP bien diseñadas](mcp-tool-design-walkthrough.md)**
+
+Es la mejor forma de que un dev backend interiorice el cambio de mentalidad: mismo backend, resultados opuestos, según cómo se diseñen las tools.
