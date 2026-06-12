@@ -4,6 +4,79 @@ Cómo diseñar tools de MCP que los agentes puedan **descubrir, entender y compo
 
 > **La idea central:** el modelo no ve tu código. Solo ve el **nombre**, la **descripción** y el **schema** de la tool, y el **JSON que devuelves**. Esas cuatro cosas *son* tu API para el agente — diséñalas con el mismo rigor que una API pública.
 
+> **Para quién es esto:** desarrolladores backend que construyen servidores MCP y no necesariamente conocen AI engineering. No hace falta saber de modelos ni de ML. Sí hace falta entender **quién va a consumir tus tools y cómo razona** — eso es lo que cubre la siguiente sección. Léela antes de los principios: cada principio resuelve un problema concreto que solo tiene sentido cuando entiendes al consumidor.
+
+---
+
+## Background: por qué esto no es una API REST
+
+Todo lo demás en esta guía se deriva de una sola idea. Si la interiorizas, los 11 principios dejan de ser reglas que memorizar y pasan a ser consecuencias obvias.
+
+### Tu API la consume un humano probabilístico, no un programa
+
+Cuando expones una API REST, **otro programador** lee tu documentación, escribe código que arma el request, maneja los errores con `if/else` y los reintentos con una librería. El código es **determinístico**: dada la misma entrada, hace exactamente lo mismo siempre. Si tu doc es ambigua, el dev pregunta, prueba en Postman, y eventualmente lo resuelve **una vez** — y ese código queda fijo.
+
+Un agente MCP es radicalmente distinto. El consumidor es un **modelo de lenguaje (LLM)**: un sistema que, dado un texto, **predice el siguiente texto más probable**. No ejecuta lógica que tú escribiste; *interpreta* lo que lee y *genera* su próxima acción. Piensa en él como un desarrollador junior brillante, increíblemente rápido, que:
+
+- **Nunca leyó tu documentación aparte.** Lo único que conoce de tu tool es el `name`, la `description` y el `inputSchema` que le pasaste — todo junto, como un menú. No hay un README que abra en otra pestaña.
+- **Decide en el momento, cada vez.** Ante la misma petición del usuario puede elegir una tool distinta hoy que ayer. No hay código fijo: hay una *decisión probabilística* en cada paso.
+- **Si algo es ambiguo, no pregunta — adivina.** Y a veces inventa (esto se llama **alucinación**): se inventa un parámetro, un valor, o llama a una tool que no existe porque "sonaba razonable".
+- **No tiene memoria de tu sistema.** Solo sabe lo que está en la conversación actual. Si una tool devuelve un ID opaco, el modelo no tiene una base de datos donde buscarlo; solo puede usar lo que le devolviste en texto.
+
+### Cómo funciona una llamada a tool, mecánicamente
+
+No hay magia. El ciclo es siempre el mismo:
+
+```
+1. Tú registras tus tools → el cliente MCP le entrega al modelo la lista
+   completa de {name, description, inputSchema} como TEXTO.
+
+2. El usuario dice algo: "¿cuánto tengo en mi cuenta?"
+
+3. El modelo LEE el menú de tools y ELIGE una por su nombre y descripción.
+   → Aquí fallan los nombres genéricos (Principio 1) y la falta de
+     frases gatillo (Principio 2).
+
+4. El modelo GENERA los argumentos como JSON, ajustándose al inputSchema.
+   → Aquí fallan los tipos ambiguos (Principio 3). Un schema laxo =
+     el modelo rellena con lo que le parece.
+
+5. Tu servidor ejecuta y DEVUELVE JSON.
+
+6. El modelo LEE tu respuesta y decide: ¿terminé? ¿llamo otra tool?
+   ¿le respondo al usuario?
+   → Aquí fallan las respuestas pobres (Principios 4, 6, 7). Si no le
+     dices qué pasó ni qué sigue, tiene que adivinar de nuevo.
+
+7. Vuelve al paso 3 hasta resolver la petición.
+```
+
+Cada flecha "→" es un punto donde un buen diseño evita un error y un mal diseño lo provoca. **Los principios no son estética: cada uno tapa una de esas grietas.**
+
+### Las cuatro consecuencias que cambian todo
+
+| En una API REST… | En una tool MCP… | Por qué importa |
+|------------------|------------------|-----------------|
+| La doc se lee aparte, una vez | La "doc" (name + description) se lee **en cada decisión**, mezclada con decenas de otras tools | Si el nombre no se distingue solo, el modelo elige mal. No hay tiempo de "investigar". |
+| El cliente maneja errores con código | El modelo "lee" el error en lenguaje natural y decide qué hacer | `{"error": "not found"}` no le dice nada. Necesita *qué hacer ahora* (Principio 4). |
+| El cliente encadena llamadas con código que tú escribiste | El modelo decide el siguiente paso razonando sobre tu respuesta | Si no listas los próximos pasos (Principio 7), reinventa el flujo cada vez — más lento, más caro, más errores. |
+| El cliente solo puede mandar lo que el código permite | El modelo puede poner **cualquier valor en cualquier parámetro** | Un `user_id` como parámetro = el modelo puede pedir los datos de *cualquiera* (Principio 11). |
+
+### Por qué un mal diseño cuesta caro (no solo "feo")
+
+Para un dev backend acostumbrado a que "si compila y responde 200, está bien", estos costos son nuevos y reales:
+
+- **Tokens = dinero y latencia.** Cada vez que el modelo tiene que razonar de más (porque no le diste el siguiente paso, o porque tu error no fue claro), consume más tokens y tarda más. Una respuesta rica reemplaza varias rondas de adivinanza.
+- **Bucles infinitos.** Si una tool falla sin decir cómo arreglarlo, el modelo puede reintentar lo mismo una y otra vez. Por eso los errores accionables (P4) y la idempotencia (P10) no son opcionales.
+- **Errores silenciosos de selección.** No hay un compilador que grite. Si dos tools se llaman parecido, el modelo usa la equivocada y nadie se entera hasta que el usuario se queja.
+- **Riesgo de seguridad real.** El modelo es manipulable por el texto del usuario (esto se llama *prompt injection*). Si la identidad viaja como parámetro, un usuario malicioso puede convencer al agente de suplantar a otro. Por eso P11 es una frontera de confianza, no un detalle.
+
+### El cambio de mentalidad, en una frase
+
+> Deja de diseñar para un **programa que ejecuta tu contrato** y empieza a diseñar para un **lector que interpreta tu intención**. Todo lo que reduzca la ambigüedad — nombres claros, tipos estrictos, errores que enseñan, respuestas que guían — hace al agente más confiable. Todo lo que la aumente, lo hace fallar de formas que no verás en los logs.
+
+Con eso en mente, los 11 principios se leen solos. Cada uno empieza por el problema que resuelve.
+
 ---
 
 ## Anatomía de una tool MCP
