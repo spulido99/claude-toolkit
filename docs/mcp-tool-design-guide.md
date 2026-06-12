@@ -431,8 +431,8 @@ Clasifica toda tool por su **nivel de impacto** para determinar qué confirmaci�
 | 1 | Read | Lee datos, sin efectos secundarios | Ninguna | `get_account_balances`, `search_transactions` |
 | 2 | Create/List | Crea recursos de bajo riesgo, lista datos | Ninguna | `create_support_ticket`, `list_accounts` |
 | 3 | Update | Modifica recursos existentes | El agente confirma en chat | `change_shipping_address`, `update_profile` |
-| 4 | Financial | Movimiento de dinero, cobros | Usuario confirma (push/OTP/biometría) | `transfer_funds`, `process_refund` |
-| 5 | Irreversible | No se puede deshacer | Aprobación explícita multi-factor + delay | `close_account`, `delete_all_data` |
+| 4 | Financial | Movimiento de dinero, cobros | Usuario confirma explícitamente en la conversación | `transfer_funds`, `process_refund` |
+| 5 | Irreversible | No se puede deshacer | Confirmación explícita reforzada (reconfirmar un dato + ventana de cancelación) | `close_account`, `delete_all_data` |
 
 **Criterios de asignación:**
 - **Nivel 1:** solo lee; llamarla dos veces da el mismo resultado.
@@ -466,7 +466,7 @@ Las operaciones de **Nivel 3 en adelante** no deben ejecutarse inmediatamente. L
 1. El agente llama transfer_funds
 2. La tool valida y devuelve status: "pending_confirmation" con detalles
 3. El agente presenta al usuario: "Transferir $150 a Ahorros. ¿Procedo?"
-4. El usuario aprueba (chat, push, biometría — según el nivel)
+4. El usuario aprueba explícitamente en la conversación
 5. El agente llama confirm_transfer
 6. La tool ejecuta y devuelve el resultado final
 ```
@@ -505,13 +505,15 @@ Las operaciones de **Nivel 3 en adelante** no deben ejecutarse inmediatamente. L
 }
 ```
 
-**Por qué delegar:** el usuario ve exactamente qué va a pasar antes de que pase; los niveles 4+ pueden exigir biometría/OTP por un canal separado; y queda un audit trail de quién aprobó qué, cuándo y por dónde.
+**Por qué delegar:** el usuario ve exactamente qué va a pasar antes de que pase; la ejecución solo corre tras una aprobación explícita; y queda un audit trail de quién aprobó qué, cuándo y por dónde.
 
 | Nivel | Canal de confirmación |
 |-------|----------------------|
 | 3 | Confirmación en chat ("¿Procedo?") |
-| 4 | Push en la app / OTP / biometría |
-| 5 | Multi-factor + período de espera |
+| 4 | Confirmación explícita del usuario en la conversación (el agente presenta el resumen completo y el usuario aprueba) |
+| 5 | Confirmación reforzada: el usuario reconfirma un dato clave de la operación + ventana de cancelación antes de ejecutar |
+
+> Si más adelante la app suma canales fuera de banda (OTP, biometría, push), se conectan aquí sin cambiar el diseño de las tools: la tool sigue devolviendo `pending_confirmation` y la ejecución sigue en una segunda tool. Hoy, el canal disponible es la confirmación explícita en la conversación.
 
 ---
 
@@ -750,7 +752,7 @@ Verifica cada tool antes de publicarla en el servidor MCP.
 ### Operaciones sensibles
 - [ ] Nivel de operación asignado (1–5) — P8
 - [ ] Tools Nivel 3+ devuelven `pending_confirmation` **antes** de ejecutar — P9
-- [ ] Tools Nivel 4+ confirman por canal separado (push, OTP, biometría) — P9
+- [ ] Tools Nivel 4+ exigen confirmación explícita del usuario antes de ejecutar (Nivel 5: confirmación reforzada) — P9
 - [ ] Tools transaccionales (Nivel 3+) aceptan `idempotency_key` — P10
 
 ### Catálogo (criterio, no checklist mecánica)

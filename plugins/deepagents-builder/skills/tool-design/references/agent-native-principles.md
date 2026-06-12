@@ -106,8 +106,8 @@ Every tool must be classified by its **impact level** to determine what confirma
 | **1** | Read | Retrieve data | None | No confirmation | `get_account_balances`, `search_transactions`, `find_customer` |
 | **2** | Create / List | Create new resources, list data | Low impact, reversible | No confirmation | `create_support_ticket`, `list_accounts`, `add_contact` |
 | **3** | Update | Modify existing resources | Moderate impact | App confirmation (agent asks user) | `change_shipping_address`, `update_profile`, `rename_account` |
-| **4** | Financial | Money movement, charges | High impact | Biometric / OTP / User explicit approval | `transfer_funds`, `process_refund`, `create_investment` |
-| **5** | Irreversible | Cannot be undone | Permanent | Multi-factor + delay | `close_account`, `delete_all_data`, `terminate_contract` |
+| **4** | Financial | Money movement, charges | High impact | Explicit user approval in the conversation | `transfer_funds`, `process_refund`, `create_investment` |
+| **5** | Irreversible | Cannot be undone | Permanent | Reinforced confirmation (user re-confirms a key detail) + cancellation window | `close_account`, `delete_all_data`, `terminate_contract` |
 
 ### Guidelines for Level Assignment
 
@@ -143,7 +143,7 @@ For operations at **Level 3 and above**, the tool should NOT execute immediately
 
 - The agent can preview the operation details before execution
 - The user sees exactly what will happen and can approve, modify, or cancel
-- For Level 4+ operations, confirmation can require biometric/OTP through the app
+- For Level 4+ operations, execution only runs after the user explicitly approves in the conversation
 - Creates an audit trail: who approved what, when, through which channel
 
 ### Confirmation Flow
@@ -152,7 +152,7 @@ For operations at **Level 3 and above**, the tool should NOT execute immediately
 1. Agent calls tool (e.g., transfer_funds)
 2. Tool returns status: "pending_confirmation" with details
 3. Agent presents details to user: "Transfer $150 to Savings. Proceed?"
-4. User approves (in chat, via push notification, via biometric)
+4. User approves explicitly in the conversation
 5. Agent calls confirmation tool (e.g., confirm_transfer)
 6. Tool executes and returns final result
 ```
@@ -196,8 +196,10 @@ For operations at **Level 3 and above**, the tool should NOT execute immediately
 | Level | Confirmation Channel | UX Pattern |
 |-------|---------------------|------------|
 | 3 (Update) | Chat confirmation | Agent asks "Shall I proceed?" in conversation |
-| 4 (Financial) | Biometric / OTP | App push notification or OTP code required |
-| 5 (Irreversible) | Multi-factor + delay | Biometric + OTP + 24h cooling period |
+| 4 (Financial) | Explicit user confirmation in chat | Agent presents the full summary; user explicitly approves before execution |
+| 5 (Irreversible) | Reinforced confirmation + delay | User re-confirms a key detail (e.g. restates the amount/name); optional cancellation window before execution |
+
+> If the app later adds out-of-band channels (OTP, biometric, push), they plug in here without changing tool design — the tool still returns `pending_confirmation` and execution still happens in a second tool. Today the available channel is explicit confirmation in the conversation.
 
 ---
 

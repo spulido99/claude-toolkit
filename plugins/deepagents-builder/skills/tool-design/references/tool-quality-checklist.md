@@ -46,7 +46,7 @@ Use this checklist to verify every tool before shipping. Each section maps to pr
 
 - [ ] Tool has an **assigned operation level** (1-5) declared in the docstring: `Operation Level: N (Category)`
 - [ ] Level 3+ tools return `pending_confirmation` status **before executing** — they do not execute directly
-- [ ] Level 4+ tools use **delegated confirmation** through a separate channel (push notification, OTP, biometric)
+- [ ] Level 4+ tools require **explicit user confirmation** in the conversation before executing (Level 5: reinforced confirmation — user re-confirms a key detail + cancellation window). Stronger out-of-band channels (OTP, biometric, push) only if the app supports them
 - [ ] Level 3+ transactional tools accept an **`idempotency_key`** parameter to prevent duplicate execution
 
 ---
