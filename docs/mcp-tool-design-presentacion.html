@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diseño de Tools para MCP — Presentación</title>
+<style>
+  :root{
+    --bg:#0f1117; --bg2:#171a23; --panel:#1c2030; --ink:#e8eaf0; --muted:#9aa3b8;
+    --accent:#7c9cff; --accent2:#4ade80; --bad:#f87171; --good:#4ade80; --warn:#fbbf24;
+    --border:#2a2f42; --code:#0b0d13;
+    --mono:'SF Mono',ui-monospace,'Cascadia Code',Menlo,Consolas,monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg);color:var(--ink);font-family:var(--sans);
+    overflow:hidden;-webkit-font-smoothing:antialiased;
+  }
+  #deck{height:100vh;width:100vw;position:relative}
+  .slide{
+    position:absolute;inset:0;display:none;flex-direction:column;
+    padding:5vh 7vw;overflow-y:auto;
+    animation:fade .35s ease;
+  }
+  .slide.active{display:flex}
+  @keyframes fade{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+  /* typography */
+  h1{font-size:clamp(2rem,5vw,4rem);font-weight:800;line-height:1.05;letter-spacing:-.02em}
+  h2{font-size:clamp(1.5rem,3.4vw,2.6rem);font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-bottom:.6em}
+  h2 .num{color:var(--accent);font-variant-numeric:tabular-nums}
+  h3{font-size:clamp(1.05rem,1.8vw,1.4rem);font-weight:700;color:var(--accent);margin:.2em 0 .5em}
+  p{font-size:clamp(1rem,1.6vw,1.4rem);line-height:1.55;color:var(--ink);max-width:60ch}
+  .lead{font-size:clamp(1.15rem,2vw,1.7rem);color:var(--muted);line-height:1.5;max-width:52ch}
+  .muted{color:var(--muted)}
+  strong{color:#fff;font-weight:700}
+  em{color:var(--accent);font-style:normal;font-weight:600}
+  ul{list-style:none;margin:.4em 0;display:flex;flex-direction:column;gap:.55em}
+  li{font-size:clamp(1rem,1.55vw,1.35rem);line-height:1.45;padding-left:1.5em;position:relative;max-width:62ch}
+  li::before{content:"▸";position:absolute;left:0;color:var(--accent)}
+  .center{justify-content:center;align-items:flex-start}
+  .kicker{font-size:.85rem;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:1.2em}
+
+  /* callout */
+  .why{
+    background:linear-gradient(135deg,rgba(124,156,255,.12),rgba(124,156,255,.04));
+    border-left:4px solid var(--accent);border-radius:8px;padding:1em 1.3em;margin:.4em 0 1.2em;
+    max-width:64ch;
+  }
+  .why .lbl{display:block;font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:.4em}
+  .why p{font-size:clamp(.98rem,1.5vw,1.3rem);color:var(--ink);max-width:none}
+
+  /* code */
+  pre{background:var(--code);border:1px solid var(--border);border-radius:10px;
+    padding:1em 1.2em;overflow:auto;font-family:var(--mono);
+    font-size:clamp(.72rem,1.05vw,1rem);line-height:1.5;color:#cdd3e0;max-width:100%}
+  code{font-family:var(--mono)}
+  .tok-bad{color:var(--bad)} .tok-good{color:var(--good)}
+  .tok-key{color:#8ab4ff} .tok-str{color:#7ee787} .tok-com{color:#6b7385;font-style:italic}
+
+  /* two column */
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:1.4em;margin-top:.6em;align-items:start}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:1.1em 1.3em}
+  .card.bad{border-color:rgba(248,113,113,.4)}
+  .card.good{border-color:rgba(74,222,128,.4)}
+  .card .tag{display:inline-block;font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:.2em .6em;border-radius:5px;margin-bottom:.7em}
+  .card.bad .tag{background:rgba(248,113,113,.18);color:var(--bad)}
+  .card.good .tag{background:rgba(74,222,128,.18);color:var(--good)}
+  .card pre{background:var(--code);font-size:clamp(.7rem,.95vw,.92rem);margin-top:.3em}
+  .card p{font-size:1.05rem;max-width:none}
+
+  /* table */
+  table{border-collapse:collapse;width:100%;max-width:90ch;margin-top:.5em;font-size:clamp(.85rem,1.3vw,1.1rem)}
+  th,td{text-align:left;padding:.6em .8em;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--accent);font-weight:700;font-size:.9em;text-transform:uppercase;letter-spacing:.05em}
+  td.x{color:var(--bad);font-weight:600} td.ok{color:var(--good);font-weight:600}
+  tr:hover td{background:rgba(255,255,255,.02)}
+
+  /* grid of principles */
+  .pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:.9em;margin-top:1em;max-width:none}
+  .pgrid .p{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:.9em 1em;display:flex;gap:.7em;align-items:flex-start}
+  .pgrid .p .n{font-size:1.4rem;font-weight:800;color:var(--accent);line-height:1;font-variant-numeric:tabular-nums;min-width:1.4em}
+  .pgrid .p .t{font-size:.98rem;line-height:1.3}
+  .pgrid .p .t b{display:block;color:#fff;margin-bottom:.15em}
+  .pgrid .p .t span{color:var(--muted);font-size:.86em}
+
+  /* flow / steps */
+  .flow{display:flex;flex-direction:column;gap:.5em;margin-top:.6em;max-width:80ch}
+  .step{display:flex;gap:.9em;align-items:flex-start;background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:.7em 1em}
+  .step .s{font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;min-width:1.4em;font-size:1.2rem}
+  .step .d{font-size:1.05rem;line-height:1.4}
+  .step .d .arrow{display:block;color:var(--warn);font-size:.92em;margin-top:.25em}
+
+  .pills{display:flex;gap:.5em;flex-wrap:wrap;margin-top:.8em}
+  .pill{background:var(--panel);border:1px solid var(--border);border-radius:999px;padding:.35em .9em;font-size:.92rem;color:var(--muted)}
+  .pill b{color:var(--accent)}
+
+  .big-quote{font-size:clamp(1.6rem,3.2vw,2.8rem);font-weight:800;line-height:1.25;letter-spacing:-.02em;max-width:20ch}
+  .big-quote .hl{color:var(--accent)}
+
+  /* chrome */
+  #bar{position:fixed;top:0;left:0;height:4px;background:var(--accent);width:0;z-index:50;transition:width .3s}
+  #nav{position:fixed;bottom:18px;right:24px;display:flex;gap:8px;z-index:50;align-items:center}
+  #nav button{background:var(--panel);border:1px solid var(--border);color:var(--ink);
+    width:38px;height:38px;border-radius:9px;cursor:pointer;font-size:1.1rem;transition:.15s}
+  #nav button:hover{background:var(--accent);color:#0b0d13;border-color:var(--accent)}
+  #count{position:fixed;bottom:24px;left:24px;color:var(--muted);font-size:.9rem;z-index:50;font-variant-numeric:tabular-nums}
+  #count b{color:var(--ink)}
+  .foot{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);color:var(--muted);font-size:.8rem;z-index:40;letter-spacing:.05em}
+  .hint{position:fixed;top:18px;right:24px;color:var(--muted);font-size:.78rem;z-index:40}
+  .badge{display:inline-block;background:rgba(124,156,255,.15);color:var(--accent);font-weight:700;
+    padding:.25em .8em;border-radius:6px;font-size:.85rem;letter-spacing:.05em;margin-bottom:1em;width:fit-content}
+  @media(max-width:760px){
+    .cols,.pgrid{grid-template-columns:1fr}
+    .slide{padding:4vh 6vw}
+  }
+</style>
+</head>
+<body>
+<div id="bar"></div>
+<div class="hint">← → para navegar · F pantalla completa</div>
+<div id="deck">
+
+  <!-- 1 — TITLE -->
+  <section class="slide active center">
+    <div class="badge">Guía interna de ingeniería</div>
+    <h1>Diseño de <span style="color:var(--accent)">Tools</span> para MCP</h1>
+    <p class="lead" style="margin-top:1em">Cómo construir tools que un agente de IA pueda <em>descubrir, entender y componer</em> — para devs backend, sin background en AI.</p>
+    <div class="pills">
+      <span class="pill"><b>11</b> principios</span>
+      <span class="pill"><b>1</b> cambio de mentalidad</span>
+      <span class="pill"><b>1</b> caso real de punta a punta</span>
+    </div>
+  </section>
+
+  <!-- 2 — IDEA CENTRAL -->
+  <section class="slide center">
+    <span class="kicker">La idea central</span>
+    <h2>El modelo <span style="color:var(--accent)">no ve tu código</span></h2>
+    <p>Solo ve cuatro cosas. Esas cuatro cosas <strong>son</strong> tu API para el agente:</p>
+    <div class="pgrid" style="grid-template-columns:repeat(2,1fr);max-width:70ch">
+      <div class="p"><span class="n">1</span><span class="t"><b>name</b><span>cómo elige la tool entre decenas</span></span></div>
+      <div class="p"><span class="n">2</span><span class="t"><b>description</b><span>cuándo usarla, qué hace</span></span></div>
+      <div class="p"><span class="n">3</span><span class="t"><b>inputSchema</b><span>qué parámetros, con qué tipos</span></span></div>
+      <div class="p"><span class="n">4</span><span class="t"><b>respuesta JSON</b><span>qué hacer y cuál es el siguiente paso</span></span></div>
+    </div>
+    <p style="margin-top:1.2em" class="muted">Diséñalas con el mismo rigor que una API pública.</p>
+  </section>
+
+  <!-- 3 — BACKGROUND: NO ES REST -->
+  <section class="slide center">
+    <span class="kicker">Background</span>
+    <h2>Tu API la consume un<br><span style="color:var(--accent)">humano probabilístico</span>, no un programa</h2>
+    <div class="cols">
+      <div class="card bad">
+        <span class="tag">API REST · consumidor = código</span>
+        <ul style="gap:.4em">
+          <li>Otro dev lee tu doc <strong>una vez</strong></li>
+          <li>Escribe código <strong>determinístico</strong></li>
+          <li>Maneja errores con <code>if/else</code></li>
+          <li>Si algo es ambiguo, <strong>pregunta y prueba</strong></li>
+        </ul>
+      </div>
+      <div class="card good">
+        <span class="tag">Tool MCP · consumidor = LLM</span>
+        <ul style="gap:.4em">
+          <li>Solo conoce <strong>name + description + schema</strong></li>
+          <li><strong>Decide en el momento</strong>, cada vez distinto</li>
+          <li>"Lee" el error y decide qué hacer</li>
+          <li>Si algo es ambiguo, <strong>adivina o inventa</strong></li>
+        </ul>
+      </div>
+    </div>
+    <p style="margin-top:1.1em" class="muted">Piensa en él como un junior brillante y rapidísimo que <em>nunca leyó tu doc aparte</em>.</p>
+  </section>
+
+  <!-- 4 — EL CICLO -->
+  <section class="slide center">
+    <span class="kicker">Cómo funciona una llamada (sin magia)</span>
+    <h2>El ciclo — y dónde falla cada principio</h2>
+    <div class="flow">
+      <div class="step"><span class="s">1</span><span class="d">Le entregas al modelo la lista de tools como <strong>texto</strong></span></div>
+      <div class="step"><span class="s">2</span><span class="d">El usuario dice: <em>"¿cuánto tengo en mi cuenta?"</em></span></div>
+      <div class="step"><span class="s">3</span><span class="d">El modelo <strong>elige</strong> una tool por su nombre y descripción<span class="arrow">→ aquí fallan los nombres genéricos (P1) y la falta de frases gatillo (P2)</span></span></div>
+      <div class="step"><span class="s">4</span><span class="d">El modelo <strong>genera</strong> los argumentos como JSON<span class="arrow">→ aquí fallan los tipos ambiguos (P3)</span></span></div>
+      <div class="step"><span class="s">5</span><span class="d">Tu servidor ejecuta y <strong>devuelve</strong> JSON</span></div>
+      <div class="step"><span class="s">6</span><span class="d">El modelo <strong>lee tu respuesta</strong> y decide: ¿terminé? ¿otra tool?<span class="arrow">→ aquí fallan las respuestas pobres (P4, P6, P7)</span></span></div>
+    </div>
+  </section>
+
+  <!-- 5 — 4 CONSECUENCIAS -->
+  <section class="slide center">
+    <span class="kicker">Lo que cambia todo</span>
+    <h2>REST vs. MCP</h2>
+    <table>
+      <tr><th>En una API REST…</th><th>En una tool MCP…</th></tr>
+      <tr><td>La doc se lee aparte, una vez</td><td class="ok">La "doc" se lee <b>en cada decisión</b>, entre decenas de tools</td></tr>
+      <tr><td>El cliente maneja errores con código</td><td class="ok">El modelo <b>lee</b> el error y decide qué hacer</td></tr>
+      <tr><td>El código encadena las llamadas</td><td class="ok">El modelo <b>razona</b> el siguiente paso solo</td></tr>
+      <tr><td>El cliente solo manda lo permitido</td><td class="ok">El modelo puede poner <b>cualquier valor</b> en cualquier parámetro</td></tr>
+    </table>
+  </section>
+
+  <!-- 6 — COSTO -->
+  <section class="slide center">
+    <span class="kicker">Por qué un mal diseño cuesta caro</span>
+    <h2>No es "feo" — es caro y riesgoso</h2>
+    <ul>
+      <li><strong>Tokens = dinero y latencia.</strong> Razonar de más por respuestas pobres se paga en cada llamada.</li>
+      <li><strong>Bucles infinitos.</strong> Un error sin remediación hace que el agente reintente lo mismo una y otra vez.</li>
+      <li><strong>Errores silenciosos.</strong> No hay compilador: si dos tools se parecen, usa la equivocada y nadie se entera.</li>
+      <li><strong>Riesgo de seguridad real.</strong> El modelo es manipulable por el texto del usuario (<em>prompt injection</em>).</li>
+    </ul>
+  </section>
+
+  <!-- 7 — CAMBIO DE MENTALIDAD -->
+  <section class="slide center">
+    <span class="kicker">El cambio de mentalidad</span>
+    <p class="big-quote">Deja de diseñar para un <span class="hl">programa que ejecuta tu contrato</span> y empieza a diseñar para un <span class="hl">lector que interpreta tu intención</span>.</p>
+    <p style="margin-top:1.4em" class="muted">Todo lo que reduzca la ambigüedad hace al agente confiable. Todo lo que la aumente, lo hace fallar de formas que no verás en los logs.</p>
+  </section>
+
+  <!-- 8 — LOS 11 DE UN VISTAZO -->
+  <section class="slide center">
+    <span class="kicker">Mapa</span>
+    <h2>Los 11 principios de un vistazo</h2>
+    <div class="pgrid">
+      <div class="p"><span class="n">1</span><span class="t"><b>Claridad semántica</b><span>nombra por operación, no CRUD</span></span></div>
+      <div class="p"><span class="n">2</span><span class="t"><b>Lenguaje natural</b><span>frases gatillo · búsqueda por nombre</span></span></div>
+      <div class="p"><span class="n">3</span><span class="t"><b>Tipos estructurados</b><span>schema con restricciones</span></span></div>
+      <div class="p"><span class="n">4</span><span class="t"><b>Errores accionables</b><span>qué pasó + qué hacer</span></span></div>
+      <div class="p"><span class="n">5</span><span class="t"><b>Terminología consistente</b><span>un término por concepto</span></span></div>
+      <div class="p"><span class="n">6</span><span class="t"><b>Semántica rica</b><span>data + formatted + mensaje</span></span></div>
+      <div class="p"><span class="n">7</span><span class="t"><b>Available actions</b><span>próximos pasos posibles</span></span></div>
+      <div class="p"><span class="n">8</span><span class="t"><b>Niveles de operación</b><span>clasifica 1–5 por impacto</span></span></div>
+      <div class="p"><span class="n">9</span><span class="t"><b>Confirmaciones delegadas</b><span>preparar → confirmar → ejecutar</span></span></div>
+      <div class="p"><span class="n">10</span><span class="t"><b>Idempotencia</b><span>evita ejecución duplicada</span></span></div>
+      <div class="p"><span class="n">11</span><span class="t"><b>Parámetros seguros</b><span>identidad nunca como parámetro</span></span></div>
+    </div>
+  </section>
+
+  <!-- 9 — P1 -->
+  <section class="slide center">
+    <h2><span class="num">P1</span> · Claridad semántica, no CRUD</h2>
+    <div class="why"><span class="lbl">Por qué es importante</span><p>El nombre es lo primero —y a veces lo único— que el modelo lee para elegir entre decenas de tools. No hay compilador que avise si elige mal: llama a la equivocada y nadie lo nota. <strong>El nombre es tu mecanismo de routing.</strong></p></div>
+    <table>
+      <tr><th>❌ Genérico</th><th>✅ De dominio</th></tr>
+      <tr><td class="x">get_resource</td><td class="ok">get_account_balances</td></tr>
+      <tr><td class="x">post_data</td><td class="ok">submit_loan_application</td></tr>
+      <tr><td class="x">delete_item</td><td class="ok">cancel_subscription</td></tr>
+    </table>
+    <p style="margin-top:.9em" class="muted">Regla: si completa la frase <em>"necesito ___"</em>, está bien nombrada.</p>
+  </section>
+
+  <!-- 10 — P2 -->
+  <section class="slide center">
+    <h2><span class="num">P2</span> · Compatibilidad con lenguaje natural</h2>
+    <div class="why"><span class="lbl">Por qué es importante</span><p>El usuario no habla en nombres de función — dice <em>"¿cuándo pagué el arriendo?"</em>. El modelo tiende el puente comparando esa frase con tu descripción. Las tools de búsqueda son la <strong>puerta de entrada</strong> a todo el catálogo.</p></div>
+    <pre><span class="tok-com">// Frases gatillo en la descripción</span>
+{
+  <span class="tok-key">"name"</span>: <span class="tok-str">"search_transactions"</span>,
+  <span class="tok-key">"description"</span>: <span class="tok-str">"Search transaction history...
+     Use when the user says: \"find a charge\",
+     \"when did I pay\", \"busca un cargo\"."</span>
+}</pre>
+    <p style="margin-top:.7em"><span class="tok-bad">❌</span> <code>get_customer(customer_id)</code> como única entrada — el usuario no sabe el ID.<br><span class="tok-good">✅</span> <code>find_customer(name, email, phone)</code> — busca por lo que el usuario sí conoce.</p>
+  </section>
+
+  <!-- 11 — P3 -->
+  <section class="slide center">
+    <h2><span class="num">P3</span> · Tipos estructurados con JSON Schema</h2>
+    <div class="why"><span class="lbl">Por qué es importante</span><p>El modelo <strong>genera</strong> los argumentos y rellena cualquier hueco con lo que le parezca probable. Cada restricción (<code>enum</code>, <code>pattern</code>, <code>minimum</code>) es un error que vuelves imposible. <strong>Lo que no restrinjas, el modelo lo improvisa.</strong></p></div>
+    <div class="cols">
+      <div class="card bad"><span class="tag">Ambiguo</span><pre><span class="tok-key">"amount"</span>: {<span class="tok-key">"type"</span>:<span class="tok-str">"number"</span>}
+<span class="tok-com">// ¿USD? ¿COP? ¿centavos?</span>
+<span class="tok-key">"months"</span>: {<span class="tok-key">"type"</span>:<span class="tok-str">"number"</span>}
+<span class="tok-com">// nada impide months: 1200</span></pre></div>
+      <div class="card good"><span class="tag">Restringido</span><pre><span class="tok-key">"amount"</span>:{<span class="tok-key">"type"</span>:<span class="tok-str">"object"</span>,
+  <span class="tok-key">"properties"</span>:{
+    <span class="tok-key">"value"</span>:{<span class="tok-key">"minimum"</span>:100000},
+    <span class="tok-key">"currency"</span>:{<span class="tok-key">"enum"</span>:[<span class="tok-str">"COP"</span>]}}}
+<span class="tok-key">"term_months"</span>:{<span class="tok-key">"enum"</span>:[6,12,18,24]}</pre></div>
+    </div>
+  </section>
+
+  <!-- 12 — P4 -->
+  <section class="slide center">
+    <h2><span class="num">P4</span> · Errores accionables</h2>
+    <div class="why"><span class="lbl">Por qué es importante</span><p>Aquí el error lo "maneja" el modelo <strong>leyéndolo</strong>. <code>{"error":"not found"}</code> no le da nada, así que reintenta lo mismo (a veces en bucle) o le inventa una excusa al usuario. <strong>El error es una instrucción de recuperación.</strong></p></div>
+    <div class="cols">
+      <div class="card bad"><span class="tag">Inútil</span><pre>{<span class="tok-key">"error"</span>:<span class="tok-str">"Not found"</span>}</pre></div>
+      <div class="card good"><span class="tag">Accionable</span><pre>{
+ <span class="tok-key">"code"</span>:<span class="tok-str">"ACCOUNT_NOT_FOUND"</span>,
+ <span class="tok-key">"message"</span>:<span class="tok-str">"No account ACC-99..."</span>,
+ <span class="tok-key">"remediation"</span>:<span class="tok-str">"Use find_customer
+    to search by name/email."</span>,
+ <span class="tok-key">"suggestions"</span>:[{<span class="tok-key">"tool"</span>:<span class="tok-str">"find_customer"</span>}]
+}</pre></div>
+    </div>
+  </section>
+
+  <!-- 13 — P5 -->
+  <section class="slide center">
+    <h2><span class="num">P5</span> · Terminología consistente</h2>
+    <div class="why"><span class="lbl">Por qué es importante</span><p>El modelo trata el catálogo entero como un solo texto. Si una tool devuelve <code>account_id</code> y otra pide <code>acct_id</code>, tiene que <em>inferir</em> que son lo mismo — y a veces falla. <strong>Un término por concepto hace que las tools se compongan.</strong></p></div>
+    <table>
+      <tr><th>Concepto</th><th>Usar siempre</th><th>Nunca</th></tr>
+      <tr><td>ID de cuenta</td><td class="ok">account_id</td><td class="x">acct_id, account_number</td></tr>
+      <tr><td>Dinero</td><td class="ok">{value, currency}</td><td class="x">amount: float</td></tr>
+      <tr><td>Fecha</td><td class="ok">YYYY-MM-DD</td><td class="x">MM/DD/YYYY, epoch</td></tr>
+      <tr><td>Paginación</td><td class="ok">cursor</td><td class="x">page_token, offset</td></tr>
+    </table>
+  </section>
+
+  <!-- 14 — P6 -->
+  <section class="slide center">
+    <h2><span class="num">P6</span> · Respuestas con semántica rica</h2>
+    <div class="why"><span class="lbl">Por qué es importante</span><p>Lo que devuelves es lo único que el modelo "ve" del resultado. Todo lo que no le des, lo reconstruye solo — gastando tokens y arriesgando errores con las cifras. <strong>La respuesta es un brief para el agente, no un volcado de la DB.</strong></p></div>
+    <pre>{
+  <span class="tok-key">"data"</span>: { <span class="tok-com">/* estructurado, para lógica */</span> },
+  <span class="tok-key">"formatted"</span>: <span class="tok-str">"Checking: $2.500 · Savings: $15.000"</span>,  <span class="tok-com">// ya formateado</span>
+  <span class="tok-key">"message_for_user"</span>: <span class="tok-str">"Estos son tus saldos. ¿Algo más?"</span>,    <span class="tok-com">// listo para decir</span>
+  <span class="tok-key">"available_actions"</span>: [ <span class="tok-com">/* próximos pasos (P7) */</span> ]
+}</pre>
+  </section>
+
+  <!-- 15 — P7 -->
+  <section class="slide center">
+    <h2><span class="num">P7</span> · Available actions (grafo de tools)</h2>
+    <div class="why"><span class="lbl">Por qué es importante</span><p>No hay código que encadene "ver saldo → transferir → confirmar". El modelo decide el siguiente paso solo, razonando desde cero cada vez. <strong>Le das un mapa en vez de obligarlo a explorar a ciegas.</strong></p></div>
+    <pre><span class="tok-key">"available_actions"</span>: [
+  {<span class="tok-key">"tool"</span>:<span class="tok-str">"get_transactions"</span>, <span class="tok-key">"params"</span>:{<span class="tok-key">"account_id"</span>:<span class="tok-str">"ACC-123"</span>}, <span class="tok-key">"label"</span>:<span class="tok-str">"Ver movimientos"</span>},
+  <span class="tok-com">// solo si balance > 0:</span>
+  {<span class="tok-key">"tool"</span>:<span class="tok-str">"transfer_funds"</span>, <span class="tok-key">"params"</span>:{<span class="tok-key">"from_account"</span>:<span class="tok-str">"ACC-123"</span>}, <span class="tok-key">"label"</span>:<span class="tok-str">"Transferir"</span>}
+]</pre>
+    <p style="margin-top:.7em" class="muted">Contextual: solo las acciones válidas en el estado actual, con los <code>params</code> ya rellenados.</p>
+  </section>
+
+  <!-- 16 — P8 -->
+  <section class="slide center">
+    <h2><span class="num">P8</span> · Niveles de operación</h2>
+    <div class="why"><span class="lbl">Por qué es importante</span><p>El agente es <strong>autónomo</strong>: puede decidir mover dinero sin que un humano apriete un botón. Etiquetar el impacto le dice al cliente MCP <em>cuándo frenar y pedir aprobación</em>. <strong>Es el freno de mano de la autonomía.</strong></p></div>
+    <table>
+      <tr><th>Nivel</th><th>Tipo</th><th>Confirmación</th><th>Ejemplo</th></tr>
+      <tr><td>1</td><td>Read</td><td>Ninguna</td><td>get_account_balances</td></tr>
+      <tr><td>2</td><td>Create/List</td><td>Ninguna</td><td>create_support_ticket</td></tr>
+      <tr><td>3</td><td>Update</td><td>Agente confirma</td><td>change_address</td></tr>
+      <tr><td class="x">4</td><td>Financial</td><td class="x">Usuario (OTP/biometría)</td><td>transfer_funds</td></tr>
+      <tr><td class="x">5</td><td>Irreversible</td><td class="x">Multi-factor + delay</td><td>close_account</td></tr>
+    </table>
+  </section>
+
+  <!-- 17 — P9 -->
+  <section class="slide center">
+    <h2><span class="num">P9</span> · Confirmaciones delegadas</h2>
+    <div class="why"><span class="lbl">Por qué es importante</span><p>El modelo puede malinterpretar o ser manipulado. Si una sola llamada <em>ejecuta</em> algo irreversible, no hay vuelta atrás. <strong>Separas decidir de ejecutar, y metes al humano justo en medio.</strong></p></div>
+    <div class="flow">
+      <div class="step"><span class="s">1</span><span class="d">El agente llama <code>loans_prepare_request</code> → valida y calcula</span></div>
+      <div class="step"><span class="s">2</span><span class="d">Devuelve <code>status: "pending_confirmation"</code> con todos los detalles</span></div>
+      <div class="step"><span class="s">3</span><span class="d">El agente presenta: <em>"Préstamo de $1.000.000, cuota $91.680. ¿Confirmo?"</em></span></div>
+      <div class="step"><span class="s">4</span><span class="d">El usuario aprueba (chat / push / biometría según el nivel)</span></div>
+      <div class="step"><span class="s">5</span><span class="d">El agente llama <code>loans_disburse</code> → <strong>ahora sí</strong> ejecuta</span></div>
+    </div>
+  </section>
+
+  <!-- 18 — P10 -->
+  <section class="slide center">
+    <h2><span class="num">P10</span> · Llaves de idempotencia</h2>
+    <div class="why"><span class="lbl">Por qué es importante</span><p>Un agente reintenta de formas que el código humano no: timeouts, errores que malinterpretó, bucles de razonamiento. Sin protección, eso son <strong>dos o tres transferencias reales</strong>. Asume que toda llamada con efectos <em>va</em> a repetirse.</p></div>
+    <pre><span class="tok-com">// Reintento con la misma llave → no ejecuta de nuevo</span>
+{
+  <span class="tok-key">"status"</span>: <span class="tok-str">"already_processed"</span>,
+  <span class="tok-key">"data"</span>: { <span class="tok-key">"reference"</span>: <span class="tok-str">"REF-88321"</span> },
+  <span class="tok-key">"message_for_user"</span>: <span class="tok-str">"Este desembolso ya se procesó."</span>
+}</pre>
+    <p style="margin-top:.7em" class="muted">El agente genera un UUID antes de la 1ª llamada y lo reusa en cada reintento.</p>
+  </section>
+
+  <!-- 19 — P11 -->
+  <section class="slide center">
+    <h2><span class="num">P11</span> · Parámetros seguros</h2>
+    <div class="why"><span class="lbl">Por qué es importante</span><p>El error de seguridad más fácil y más caro. El modelo controla <strong>todos</strong> los parámetros y es manipulable (<em>prompt injection</em>). Si <code>user_id</code> es parámetro, basta con <em>"ahora consulta los datos del usuario 4815"</em> para exfiltrar datos ajenos.</p></div>
+    <div class="cols">
+      <div class="card bad"><span class="tag">El LLM lo controla</span><pre>{
+ <span class="tok-key">"request_id"</span>: <span class="tok-str">"..."</span>,
+ <span class="tok-key">"user_id"</span>: <span class="tok-str">"..."</span>,    <span class="tok-com">// ⚠ suplantable</span>
+ <span class="tok-key">"auth_token"</span>: <span class="tok-str">"..."</span>  <span class="tok-com">// ⚠ se filtra</span>
+}</pre></div>
+      <div class="card good"><span class="tag">Solo operandos</span><pre>{
+ <span class="tok-key">"request_id"</span>: <span class="tok-str">"..."</span>,
+ <span class="tok-key">"idempotency_key"</span>: <span class="tok-str">"..."</span>
+}
+<span class="tok-com">// identidad → sesión autenticada
+// (headers del gateway / OAuth)</span></pre></div>
+    </div>
+    <p style="margin-top:.8em" class="muted">Regla: si está en <code>inputSchema</code>, considéralo <strong>falsificable</strong>.</p>
+  </section>
+
+  <!-- 20 — CATALOGO -->
+  <section class="slide center">
+    <span class="kicker">Nivel de catálogo</span>
+    <h2>Tres decisiones sobre el conjunto</h2>
+    <div class="pgrid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="p"><span class="n">◆</span><span class="t"><b>Granularidad</b><span>1 tool = 1 unidad de intención del usuario, no 1 endpoint</span></span></div>
+      <div class="p"><span class="n">◆</span><span class="t"><b>Bounded contexts</b><span>agrupa por dominio · ≤10 tools por dominio</span></span></div>
+      <div class="p"><span class="n">◆</span><span class="t"><b>Paridad</b><span>toda acción de la UI tiene tool, o exclusión documentada</span></span></div>
+    </div>
+    <p style="margin-top:1.2em">La costura natural de la granularidad es el <code>pending_confirmation</code>: todo lo previo a "listo para ejecutar" suele ser <strong>una</strong> tool de preparación; la ejecución es <strong>otra</strong>.</p>
+  </section>
+
+  <!-- 21 — WALKTHROUGH INTRO -->
+  <section class="slide center">
+    <div class="badge">Caso real de punta a punta</div>
+    <h2>El mismo backend,<br><span style="color:var(--accent)">resultados opuestos</span></h2>
+    <p class="lead">Un banco quiere que su agente otorgue micro-préstamos. El backend ya existe: 6 endpoints REST.</p>
+    <pre style="margin-top:1em;max-width:70ch"><span class="tok-com">GET</span>  /users/{id}/loan-offers
+<span class="tok-com">POST</span> /loans/requests            <span class="tok-com">→ request_id</span>
+<span class="tok-com">POST</span> /loans/requests/{id}/simulate
+<span class="tok-com">POST</span> /loans/requests/{id}/confirm
+<span class="tok-com">POST</span> /loans/requests/{id}/disburse  <span class="tok-com">→ mueve dinero</span>
+<span class="tok-com">GET</span>  /loans/{id}</pre>
+  </section>
+
+  <!-- 22 — INTENTO 1 FALLOS -->
+  <section class="slide center">
+    <span class="kicker">Intento 1 · 1 endpoint = 1 tool</span>
+    <h2>Compila. Responde 200.<br>Con un agente es un <span style="color:var(--bad)">desastre</span>.</h2>
+    <p class="muted" style="margin-bottom:.6em">Siguiendo al agente con <em>"necesito un millón a 12 meses"</em>:</p>
+    <ul style="gap:.45em">
+      <li>Duda entre <code>create_request</code> y otras <code>create_*</code> <span class="muted">— P1</span></li>
+      <li>Adivina <code>amount:1000000</code> (¿COP?) y <code>months:12</code> <span class="muted">— P2, P3</span></li>
+      <li>Pide <code>userId</code> que no tiene — o el de cualquiera; <code>authToken</code> que no debe ver <span class="muted">— P11</span></li>
+      <li><code>create_request</code> → <code>{requestId}</code> … ¿y ahora qué? <span class="muted">— P6, P7</span></li>
+      <li>Llama <code>disburse</code> directo → <strong>desembolsa sin confirmar</strong> <span class="muted">— P8, P9</span></li>
+      <li>La red falla, reintenta → <strong>DOBLE DESEMBOLSO</strong> <span class="muted">— P10</span></li>
+    </ul>
+    <p style="margin-top:.9em"><strong>Ninguno aparece en tus logs.</strong> El backend respondió 200 a todo.</p>
+  </section>
+
+  <!-- 23 — INTENTO 2 -->
+  <section class="slide center">
+    <span class="kicker">Intento 2 · por intención del usuario</span>
+    <h2>6 endpoints → <span style="color:var(--good)">4 tools</span></h2>
+    <table>
+      <tr><th>Intención del usuario</th><th>Tool</th><th>Nivel</th></tr>
+      <tr><td>"¿Para cuánto califico?"</td><td class="ok">get_loan_offers</td><td>1 · Read</td></tr>
+      <tr><td>"Quiero X a Y meses"</td><td class="ok">loans_prepare_request</td><td>1 · solo calcula</td></tr>
+      <tr><td>"Sí, dale"</td><td class="ok">loans_disburse</td><td class="x">4 · Financial</td></tr>
+      <tr><td>"¿Cómo va mi préstamo?"</td><td class="ok">get_loan_status</td><td>1 · Read</td></tr>
+    </table>
+    <p style="margin-top:1em"><code>create + simulate + confirm</code> colapsan en <strong>una</strong> tool de preparación — el <code>request_id</code> intermedio nunca le sirve al usuario. La decisión real (desembolsar o no) queda <strong>separada</strong>.</p>
+  </section>
+
+  <!-- 24 — LADO A LADO -->
+  <section class="slide center">
+    <span class="kicker">El flujo, lado a lado</span>
+    <h2>Mismo backend</h2>
+    <div class="cols">
+      <div class="card bad"><span class="tag">Antes</span><pre><span class="tok-com">"un millón a 12 meses"</span>
+duda qué create_*           <span class="tok-bad">P1</span>
+adivina moneda y plazo      <span class="tok-bad">P2 P3</span>
+no tiene userId             <span class="tok-bad">P11</span>
+{requestId}... ¿y ahora?    <span class="tok-bad">P6 P7</span>
+disburse SIN confirmar      <span class="tok-bad">P8 P9</span>
+reintenta → DOBLE           <span class="tok-bad">P10</span></pre></div>
+      <div class="card good"><span class="tag">Después</span><pre><span class="tok-com">"un millón a 12 meses"</span>
+get_loan_offers (sesión)    <span class="tok-good">P11</span>
+ ↳ apunta a prepare         <span class="tok-good">P7</span>
+prepare(amount,term_months) <span class="tok-good">P3</span>
+ ↳ pending_confirmation     <span class="tok-good">P9</span>
+<span class="tok-com">"sí" →</span> disburse(key)         <span class="tok-good">P8 P10</span>
+ ↳ completed + next steps   <span class="tok-good">P7</span></pre></div>
+    </div>
+  </section>
+
+  <!-- 25 — LA LECCION -->
+  <section class="slide center">
+    <span class="kicker">La lección</span>
+    <h2>El backend no cambió ni una línea</h2>
+    <p>Lo que cambió: dejamos de exponerlo como un <strong>espejo de la DB</strong> y empezamos a exponerlo como un <strong>menú de intenciones</strong> para un lector que interpreta.</p>
+    <ul style="margin-top:.8em">
+      <li>Empieza por las <strong>intenciones</strong>, no por los endpoints</li>
+      <li>El <strong>schema</strong> es tu contención — lo que no restrinjas, se improvisa</li>
+      <li>La <strong>respuesta</strong> es un brief: qué pasó y qué sigue</li>
+      <li>Separa <strong>decidir de ejecutar</strong> y blinda lo irreversible</li>
+      <li>La <strong>identidad</strong> nunca es un parámetro</li>
+    </ul>
+  </section>
+
+  <!-- 26 — CIERRE -->
+  <section class="slide center">
+    <div class="badge">Para construir</div>
+    <h1 style="font-size:clamp(1.8rem,4vw,3.2rem)">Antes de publicar una tool,<br>pásala por el <span style="color:var(--accent)">checklist</span>.</h1>
+    <div class="pills" style="margin-top:1.4em">
+      <span class="pill">📄 mcp-tool-design-guide.md</span>
+      <span class="pill">🔧 mcp-tool-design-walkthrough.md</span>
+    </div>
+    <p style="margin-top:1.6em" class="muted">Documentación completa en el repo. ¿Preguntas?</p>
+  </section>
+
+</div>
+
+<div id="count"><b id="cur">1</b> / <span id="tot">26</span></div>
+<div id="nav">
+  <button onclick="go(-1)" aria-label="Anterior">‹</button>
+  <button onclick="go(1)" aria-label="Siguiente">›</button>
+</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  let i=0;const tot=slides.length;
+  document.getElementById('tot').textContent=tot;
+  function show(n){
+    i=Math.max(0,Math.min(tot-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    document.getElementById('cur').textContent=i+1;
+    document.getElementById('bar').style.width=((i+1)/tot*100)+'%';
+    slides[i].scrollTop=0;
+  }
+  function go(d){show(i+d)}
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){go(1);e.preventDefault()}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){go(-1);e.preventDefault()}
+    else if(e.key==='Home')show(0);
+    else if(e.key==='End')show(tot-1);
+    else if(e.key.toLowerCase()==='f'){
+      if(!document.fullscreenElement)document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
+    }
+  });
+  // click izquierda/derecha de la pantalla (no sobre botones/links)
+  document.getElementById('deck').addEventListener('click',e=>{
+    if(e.target.closest('a,button,pre'))return;
+    go(e.clientX < window.innerWidth/2 ? -1 : 1);
+  });
+  show(0);
+</script>
+</body>
+</html>
