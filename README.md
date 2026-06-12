@@ -99,6 +99,10 @@ Become a LinkedIn Top Voice on AI topics.
 **Skills:**
 - Content generation and optimization
 
+## Docs
+
+- **[Guía de Diseño de Tools para MCP](docs/mcp-tool-design-guide.md)** — Buenas prácticas para construir tools de MCP bien diseñadas (en español, ejemplos agnósticos en JSON Schema). Adaptación standalone del skill `tool-design` de `deepagents-builder`, pensada para compartir con equipos de desarrollo.
+
 ## Repository Structure
 
 ```
