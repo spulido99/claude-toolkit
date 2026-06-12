@@ -6,11 +6,20 @@ Architecture patterns for designing systems where AI agents are first-class cons
 
 ## 1. Available Actions Pattern
 
-Every tool response **MUST** include `available_actions` — a list of tools that make sense as logical next steps given the current state. This creates an **implicit navigation graph** that guides the agent through multi-step workflows without hardcoded orchestration.
+Tool responses include `available_actions` — a list of tools that make sense as logical next steps — **when the valid next steps depend on state the agent cannot infer from the static catalog**. This creates an **implicit navigation graph** that guides the agent through multi-step workflows without hardcoded orchestration.
 
 ### Why It Matters
 
-Without available actions, the agent must reason from scratch about what to do next after every tool call. This increases latency, token consumption, and error probability. With available actions, the agent has a curated menu of contextually appropriate next steps.
+When next steps are state-dependent (a pending transfer exposes `confirm`/`cancel`; an empty account hides `transfer_funds`), the static catalog can't express them — the menu encodes backend state the agent would otherwise have to probe for.
+
+### Scope honestly stated
+
+This is **our house pattern, not an industry standard**: no major vendor recommends it and the MCP spec has no equivalent field (results carry only `content`, `structuredContent`, `isError`). It also has two real costs:
+
+- **Tokens**: a boilerplate menu on every response is low-signal context — Anthropic's guidance is to return "only the fields Claude needs to reason about its next step". Cap at ~3 actions; omit on terminal/simple-read tools where the catalog already makes the next step obvious.
+- **Trust**: tool results are untrusted data (OWASP LLM01). Agents following action menus from tool output is safe only for first-party tools you control end-to-end — never train flows to obey such fields from third-party servers.
+
+Validate the menu's value with evals (success rate, call count, tokens, with vs without) before mandating it catalog-wide.
 
 ### Response Pattern
 
@@ -103,15 +112,15 @@ Every tool must be classified by its **impact level** to determine what confirma
 
 | Level | Category | Description | Side Effects | Confirmation Required | Example Tools |
 |-------|----------|-------------|-------------|----------------------|---------------|
-| **1** | Read | Retrieve data | None | No confirmation | `get_account_balances`, `search_transactions`, `find_customer` |
-| **2** | Create / List | Create new resources, list data | Low impact, reversible | No confirmation | `create_support_ticket`, `list_accounts`, `add_contact` |
+| **1** | Read | Retrieve or list data | None | No confirmation | `get_account_balances`, `search_transactions`, `find_customer`, `list_accounts` |
+| **2** | Create | Create new low-stakes resources | Low impact, reversible | No confirmation | `create_support_ticket`, `add_contact` |
 | **3** | Update | Modify existing resources | Moderate impact | App confirmation (agent asks user) | `change_shipping_address`, `update_profile`, `rename_account` |
 | **4** | Financial | Money movement, charges | High impact | Explicit user approval in the conversation | `transfer_funds`, `process_refund`, `create_investment` |
 | **5** | Irreversible | Cannot be undone | Permanent | Reinforced confirmation (user re-confirms a key detail) + cancellation window | `close_account`, `delete_all_data`, `terminate_contract` |
 
 ### Guidelines for Level Assignment
 
-- **Level 1**: The tool only reads data. Calling it twice produces the same result. No state changes.
+- **Level 1**: The tool only reads or lists data. Calling it twice produces the same result. No state changes. (Listing is reading — it never belongs above Level 1.)
 - **Level 2**: The tool creates something new but the creation is low-stakes (a support ticket, a note, a tag). Usually reversible.
 - **Level 3**: The tool modifies existing data. The modification is not financial but could affect the user's experience (address change, profile update).
 - **Level 4**: The tool involves money movement, charges, or financial commitments. Even small amounts get Level 4.
@@ -120,7 +129,7 @@ Every tool must be classified by its **impact level** to determine what confirma
 ### Mapping to Agent Frameworks
 
 ```python
-# DeepAgents interrupt_on pattern
+# DeepAgents interrupt_on pattern — keys are TOOL NAMES; list only Level 3+ tools
 from deepagents import create_deep_agent
 
 agent = create_deep_agent(
@@ -128,10 +137,16 @@ agent = create_deep_agent(
     system_prompt="You handle all operations.",
     tools=all_tools,
     interrupt_on={
-        "tool": {"allowed_decisions": ["approve", "reject", "modify"]},
+        "change_shipping_address": {"allowed_decisions": ["approve", "reject", "modify"]},
+        "transfer_funds": {"allowed_decisions": ["approve", "reject", "modify"]},
+        "close_account": {"allowed_decisions": ["approve", "reject"]},
     },
 )
 ```
+
+### Mapping to MCP
+
+The industry-standard expression of operation impact is MCP's `ToolAnnotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` — spec 2025-03-26). Always emit annotations alongside the prose level when generating MCP tools: client safety UIs read annotations, not descriptions. Per the spec they are untrusted hints — "Clients MUST consider tool annotations to be untrusted unless they come from trusted servers" — so enforcement stays server-side.
 
 ---
 
@@ -166,13 +181,13 @@ For operations at **Level 3 and above**, the tool should NOT execute immediately
         "operation": "transfer_funds",
         "summary": "Transfer USD 150.00 from Main Checking to Joint Savings",
         "details": {
-            "amount": {"value": 150.00, "currency": "USD"},
+            "amount": {"value": "150.00", "currency": "USD"},
             "from_account": "ACC-12345678",
             "from_account_name": "Main Checking",
             "to_account": "ACC-87654321",
             "to_account_name": "Joint Savings",
             "estimated_arrival": "2025-01-16",
-            "fee": {"value": 0.00, "currency": "USD"}
+            "fee": {"value": "0.00", "currency": "USD"}
         },
         "confirmation_method": {
             "tool": "confirm_transfer",
@@ -201,6 +216,10 @@ For operations at **Level 3 and above**, the tool should NOT execute immediately
 
 > If the app later adds out-of-band channels (OTP, biometric, push), they plug in here without changing tool design — the tool still returns `pending_confirmation` and execution still happens in a second tool. Today the available channel is explicit confirmation in the conversation.
 
+### One confirmation layer, not two
+
+This pattern overlaps with framework/client HITL (`interrupt_on`, MCP client consent, MCP **elicitation** — the spec's in-protocol mechanism for a server to request user input/confirmation mid-operation, added 2025-06-18). Running both means the user approves the same operation twice. Pick one per deployment: `pending_confirmation` when you need portable, auditable previews with computed details (fees, dates); framework HITL when simplicity wins. Stack both only at Level 5, where reinforced confirmation is the point.
+
 ---
 
 ## 4. Rich Semantics
@@ -215,8 +234,8 @@ Every tool response must include multiple representations of the result to suppo
     "data": {
         "account_id": "ACC-12345678",
         "balances": [
-            {"type": "checking", "available": {"value": 2500.00, "currency": "USD"}},
-            {"type": "savings", "available": {"value": 15000.00, "currency": "USD"}}
+            {"type": "checking", "available": {"value": "2500.00", "currency": "USD"}},
+            {"type": "savings", "available": {"value": "15000.00", "currency": "USD"}}
         ]
     },
 
@@ -226,13 +245,11 @@ Every tool response must include multiple representations of the result to suppo
     # Voice-optimized version (no symbols, spelled-out numbers)
     "formatted_spoken": "Your checking account has twenty-five hundred dollars and your savings has fifteen thousand dollars. Your total is seventeen thousand five hundred dollars.",
 
-    # Suggested message for the agent to relay to the user
+    # Optional: suggested message to relay — only when correct phrasing
+    # requires backend knowledge; otherwise the model phrases it from `formatted`
     "message_for_user": "Here are your current balances. Would you like to see recent transactions or make a transfer?",
 
-    # Structured data — raw
-    "data": { ... },
-
-    # Next steps
+    # Next steps (when state-dependent — see Principle 1)
     "available_actions": [ ... ]
 }
 ```
@@ -250,9 +267,11 @@ Every tool response must include multiple representations of the result to suppo
 ### Why Multiple Formats?
 
 - **`formatted`** saves the agent from formatting data into text (reduces hallucination)
-- **`formatted_spoken`** prevents voice assistants from saying "dollar sign two five zero zero"
-- **`message_for_user`** gives the agent a ready-made response, reducing latency
-- **`data`** lets the agent perform calculations or pass values to other tools
+- **`formatted_spoken`** prevents voice assistants from saying "dollar sign two five zero zero" — emit only for voice channels
+- **`message_for_user`** gives the agent a ready-made response — emit only when the phrasing needs backend knowledge; if it would equal `formatted`, drop it
+- **`data`** lets the agent perform calculations or pass values to other tools (in MCP, this belongs in `structuredContent` with a declared `outputSchema`)
+
+**But never duplicate the same content across fields** — every field is paid for in context, and the most common envelope failure is `formatted`, `message_for_user`, and a `formatted` clone of `data` saying the same thing three times. Multiple formats are for genuinely different consumers, not redundancy. Bound response size: paginate, filter, and truncate with sensible defaults, and consider a `response_format: "concise" | "detailed"` parameter on read-heavy tools (Anthropic's pattern; their Slack example cut 206 tokens to 72).
 
 ---
 
@@ -262,10 +281,12 @@ All transactional operations (Level 3+) must support **UUID-based idempotency ke
 
 ### How It Works
 
-1. Agent generates a UUID before the first call: `550e8400-e29b-41d4-a716-446655440000`
-2. Agent passes it as `idempotency_key` parameter
-3. Backend stores the key with the operation result
+1. Agent calls the tool **without** a key; the tool generates one server-side (`uuid.uuid4()`) and returns it in the response
+2. Backend stores the key with the operation result
+3. On a retry, the agent passes back the **returned** key as `idempotency_key`
 4. If the same key is sent again, the backend returns the **original result** without re-executing
+
+**The LLM must never invent the key.** Idempotency requires real entropy from the caller (Stripe: client-generated "V4 UUIDs… with enough entropy to avoid collisions" — and the "client" with entropy is harness/tool code, not the model). LLMs are memorization-driven pseudo-random generators: they repeat famous example UUIDs and biased values (arXiv 2502.19965). Two operations sharing a hallucinated key means one silently never executes. In the prepare/confirm flow (Principle 3), the prepared operation ID already acts as the execution's idempotency token.
 
 ### Rules
 
@@ -273,9 +294,9 @@ All transactional operations (Level 3+) must support **UUID-based idempotency ke
 |------|-------------|
 | **Format** | UUID v4 or deterministic `{operation}-{entity_id}-{timestamp}` |
 | **Scope** | Per-tool, per-user |
-| **TTL** | 24 hours minimum for financial operations |
+| **TTL** | 24 hours minimum for financial operations (matches Stripe) |
 | **Collision behavior** | Return original result, do NOT execute again |
-| **Agent responsibility** | Generate key before first call, reuse on retries |
+| **Who generates it** | Tool/framework, server-side; the agent only **reuses** the returned key on retries |
 | **Status on collision** | Return `"status": "already_processed"` with original data |
 
 ### Implementation Pattern
@@ -337,7 +358,8 @@ domains/
 
 ### Rules for Bounded Contexts
 
-- **Max 10 tools per domain**: If a domain exceeds 10 tools, split it into sub-domains
+- **Max 10 tools per domain**: If a domain exceeds 10 tools, split it into sub-domains. This limit is evidence-backed: OpenAI recommends <20 active functions, Gemini 10-20 max, Anthropic measured selection degrading "significantly once you exceed 30–50 available tools", and published evals show non-linear accuracy cliffs as catalogs grow. Keep the **active set per agent/subagent ≤20**; for large catalogs use tool search/deferred loading instead of registering everything
+- **Prefix tool names by domain when the catalog spans domains** (`loans_simulate`, `accounts_get_balances`): aids disambiguation and tool-search discoverability (Anthropic's recommendation, with the caveat that prefix-vs-suffix effects vary by model — validate with evals)
 - **Each domain exports a `TOOLS` list**: `TOOLS = [tool1, tool2, ...]`
 - **Shared types go in a common `schemas.py`**: Money, PaginatedRequest, etc.
 - **Domain-specific vocabulary**: Each domain can define terms specific to its context
@@ -367,7 +389,9 @@ agent = create_agent(
 
 ## 7. Parity Principle
 
-The agent must be able to do **everything** users can do through the UI. No orphan UI actions — every button, form, and workflow in the app must have a corresponding tool.
+The agent must be able to **accomplish everything** users can accomplish through the UI. No orphan capabilities — every outcome reachable via button, form, or workflow in the app must be reachable through tools.
+
+**Parity is of outcomes, not buttons.** It does not mean one tool per endpoint or per UI control — that's the failure mode Anthropic explicitly warns against ("tools that merely wrap existing software functionality or API endpoints"). One consolidated tool may cover several screens (`get_customer_context` instead of `get_customer_by_id` + `list_transactions` + `list_notes`), and that still satisfies parity. Audit by user goal, then design the smallest tool set that covers the goals — parity sets the *coverage* bar, granularity and catalog-size limits set the *shape*.
 
 ### Why Parity Matters
 

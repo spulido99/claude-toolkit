@@ -68,7 +68,7 @@ def tool_name(param1: str, param2: dict) -> dict:
 
     Args:
         param1: Description with format. Example: "ACC-12345678"
-        param2: Description with structure. Example: {"value": 100, "currency": "USD"}
+        param2: Description with structure. Example: {"value": "100.00", "currency": "USD"}
 
     Returns:
         Standard response with data, formatted text, and available_actions.
@@ -80,16 +80,17 @@ def tool_name(param1: str, param2: dict) -> dict:
 Trigger phrases bridge the gap between how users speak and how tools are named:
 
 - Include **colloquial variations**: "how much do I have", "my balance", "how much money"
-- Include **partial phrases**: "check balance", "see my account"
 - Include **intent synonyms**: "transfer", "send money", "move funds"
 - Write them in the **primary language of the users**
+- **Cap at 3-5 high-value phrases** — long lists are context bloat and age badly
+- Also state **when NOT to use the tool** and the boundary with neighboring tools — Anthropic's docs ask for "when it should be used (and when it shouldn't)"; this half is the one most catalogs miss
 
 ### What LLMs Actually Read
 
 The LLM processes tool descriptions as part of its system prompt. Key behaviors:
 
-- **Longer descriptions = better routing**: A 3-line description outperforms a 1-line description
-- **Examples in descriptions improve parameter accuracy**: Showing `"ACC-12345678"` prevents the agent from hallucinating formats
+- **Detailed, high-signal descriptions improve routing** — Anthropic: "by far the most important factor in tool performance… aim for at least 3-4 sentences". But descriptions are paid for in context on every turn: detail that disambiguates earns its tokens; padding does not
+- **Examples in descriptions improve parameter accuracy**: Showing `"ACC-12345678"` prevents the agent from hallucinating formats. (The Claude API also supports a schema-validated `input_examples` field for complex tools)
 - **Trigger phrases reduce false negatives**: Without them, the agent may miss valid use cases
 - **Structured Args sections** help the agent populate parameters correctly
 
@@ -225,7 +226,7 @@ Use **one term per concept** across all tools in the catalog. Inconsistent namin
 
 | Type | Format | Example |
 |------|--------|---------|
-| Money | `{"value": decimal, "currency": "ISO 4217"}` | `{"value": 150.00, "currency": "USD"}` |
+| Money | `{"value": "decimal string", "currency": "ISO 4217"}` — never IEEE-754 floats (Stripe: integer minor units; Google: units+nanos; PayPal: decimal strings) | `{"value": "150.00", "currency": "USD"}` |
 | Date | ISO 8601 date | `2025-01-15` |
 | Timestamp | ISO 8601 with timezone | `2025-01-15T10:30:00Z` |
 | Phone | E.164 | `+14155551234` |
@@ -246,8 +247,8 @@ Use **one term per concept** across all tools in the catalog. Inconsistent namin
 from typing import TypedDict
 
 class Money(TypedDict):
-    value: float
-    currency: str  # ISO 4217
+    value: str       # decimal string, e.g. "150.00" — never float
+    currency: str    # ISO 4217
 
 class PaginatedRequest(TypedDict, total=False):
     cursor: str
@@ -275,9 +276,25 @@ These principles map directly to the **Model Context Protocol (MCP)** tool defin
     "type": "object",
     "properties": { ... },
     "required": [ ... ]
+  },
+  "outputSchema": { "type": "object", "properties": { ... } },
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false
   }
 }
 ```
+
+### Spec features to use (post-2025 revisions)
+
+| Spec feature | Revision | Use it for |
+|--------------|----------|-----------|
+| `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) | 2025-03-26 | The standard, machine-readable version of Operation Levels — client safety UIs key off these, never off description prose. Per spec they are untrusted **hints**; enforcement stays server-side |
+| `outputSchema` + `structuredContent` | 2025-06-18 | Declared, validated structured results ("Servers MUST provide structured results that conform to this schema") — the spec-native home for the response envelope's `data` |
+| **Elicitation** (`elicitation/create`) | 2025-06-18 | In-protocol user confirmation/input mid-operation — the standard alternative to a two-tool prepare/confirm flow when the client supports it. Never for passwords/tokens (spec MUST NOT) |
+| Cursor pagination | core | List operations: opaque cursors, "Clients MUST treat cursors as opaque tokens" |
 
 ### Principle-to-MCP Mapping
 

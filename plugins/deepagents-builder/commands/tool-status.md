@@ -44,14 +44,14 @@ For each tool, award one point per principle whose pass condition holds (static 
 |---|-----------|--------------------------------|
 | 1 | Semantic name & casing | Function name is not a bare `get_`/`post_`/`update_`/`delete_` prefix without a domain noun, **and** every parameter name is `snake_case` (flag camelCase like `installmentsQuantity` or Header-Case like `Incognia-Request-Token`) |
 | 2 | Trigger phrases | Docstring contains "when the user says" or multiple quoted trigger phrases |
-| 3 | Structured types | Money params use `dict` not `float`; date params mention ISO format |
+| 3 | Structured types | Money params use `dict` not `float`, with `value` as a decimal string (never IEEE-754 float); date params mention ISO format |
 | 4 | Actionable errors | Error returns include `code` and `remediation` fields |
 | 5 | Consistent terminology | Same param names across tools in the same domain (e.g. always `account_id`, not mixed) |
-| 6 | Standard response | Returns a dict with `data`, `formatted`, `available_actions`, `message_for_user` |
-| 7 | Tool graph | `available_actions` present in the return value |
-| 8 | Operation level | Docstring contains `Operation Level:` |
-| 9 | Confirmation flow | Level 3+ tools return `pending_confirmation` |
-| 10 | Idempotency | Level 3+ tools accept an `idempotency_key` parameter |
+| 6 | Standard response | Returns a dict with `data` (plus `formatted` where data isn't trivially readable); no field duplicates another's content; responses that can grow have pagination/limit/truncation defaults |
+| 7 | Tool graph | `available_actions` present where next steps are **state-dependent** (confirmation flows, conditional actions); terminal or simple-read tools pass without it |
+| 8 | Operation level | Docstring contains `Operation Level:`; MCP definitions also carry matching `annotations` (`readOnlyHint`/`destructiveHint`/`idempotentHint`) |
+| 9 | Confirmation flow | Level 3+ tools return `pending_confirmation` **or** are covered by framework HITL (`interrupt_on`) — one layer, not both |
+| 10 | Idempotency | Level 3+ tools accept an `idempotency_key` parameter, generated server-side when omitted and returned in the response |
 | 11 | Secure parameters | No parameter is caller identity or a credential: fails if any parameter name is `user_id`, `customer_id`, `tenant_id`, or matches `*token*`, `*key*`, `*secret*`, `*password*`, `*credential*` (these must be framework-injected, never LLM-controllable) |
 
 Score: count of passing checks out of 11.

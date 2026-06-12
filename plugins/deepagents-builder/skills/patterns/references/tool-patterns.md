@@ -29,10 +29,14 @@ def get_account_balances(include_details: bool = False) -> dict:
     return {
         "data": [...],
         "formatted": "Your accounts:\n  - PYG Account: Gs. 5,000,000",
-        "available_actions": ["get_transactions", "transfer_funds"],
-        "message_for_user": "Your accounts:\n  - PYG Account: Gs. 5,000,000"
+        "available_actions": [
+            {"tool": "get_transactions", "params": {"account_id": "..."}, "label": "View transactions"},
+            {"tool": "transfer_funds", "params": {"from_account": "..."}, "label": "Transfer funds"}
+        ]
     }
 ```
+
+Include `available_actions` when next steps are **state-dependent**; omit on terminal/simple-read tools (it costs tokens on every response). `message_for_user` is optional — only when phrasing needs backend knowledge; otherwise the model phrases it from `formatted`.
 
 See [Tool Design Skill](../../tool-design/SKILL.md) for complete AI-friendly tool design principles.
 

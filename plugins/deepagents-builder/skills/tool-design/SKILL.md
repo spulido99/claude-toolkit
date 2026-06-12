@@ -77,6 +77,11 @@ def get_account_balances(account_id: str) -> dict:
 
 Tools must be discoverable through the language users actually speak. Include **trigger phrases** in docstrings and design for **search-first** interaction patterns.
 
+Two calibrations (descriptions are paid for in context on every turn):
+
+- **Cap trigger phrases at 3-5 high-value ones.** Long colloquialism lists are low-signal bloat. (Enumerated trigger lists are our own convention — vendor guidance asks for prose covering "when it should be used *and when it shouldn't*"; the phrases are a compact way to do the first half.)
+- **State when NOT to use the tool** and the boundary with neighboring tools (e.g. "For balances of a single known account use `get_account_balances`; for finding the account first use `find_account`"). This is the part most often missing and the one Anthropic's docs call out explicitly.
+
 ### Trigger Phrases in Docstrings
 
 ```python
@@ -148,7 +153,7 @@ def transfer_funds(amount: float, to_account: str) -> dict:
 # Good: Structured money type with explicit currency
 @tool
 def transfer_funds(
-    amount: dict,       # {"value": 150.00, "currency": "USD"}
+    amount: dict,       # {"value": "150.00", "currency": "USD"}
     from_account: str,
     to_account: str,
     idempotency_key: str = None
@@ -156,14 +161,16 @@ def transfer_funds(
     """Transfer funds between accounts.
 
     Args:
-        amount: Money object with 'value' (decimal) and 'currency' (ISO 4217).
-                Example: {"value": 150.00, "currency": "USD"}
+        amount: Money object with 'value' (decimal **string**) and 'currency' (ISO 4217).
+                Example: {"value": "150.00", "currency": "USD"}
         from_account: Source account ID.
         to_account: Destination account ID.
         idempotency_key: Unique key to prevent duplicate transfers.
     """
     pass
 ```
+
+**Never IEEE-754 floats for money.** No major payment API uses bare floats: Stripe uses integers in the currency's minor unit (`amount: 1000` for $10.00), Google's `google.type.Money` uses `units` + `nanos`, PayPal uses decimal strings (`"10.99"`). Floats silently corrupt amounts (a float `1.23` has charged €1 in production systems). Use a **decimal string** (`"150.00"`) or integer minor units. Zero-decimal currencies (PYG, JPY) are plain integers either way.
 
 ### JSON Schema for Tool Parameters
 
@@ -176,8 +183,8 @@ def transfer_funds(
       "amount": {
         "type": "object",
         "properties": {
-          "value": {"type": "number", "minimum": 0.01},
-          "currency": {"type": "string", "enum": ["USD", "EUR", "MXN"], "default": "USD"}
+          "value": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,2})?$", "description": "Decimal string, e.g. \"150.00\". Never a float."},
+          "currency": {"type": "string", "enum": ["USD", "EUR", "PYG"], "default": "USD"}
         },
         "required": ["value", "currency"]
       },
@@ -194,7 +201,7 @@ def transfer_funds(
 
 | Concept | Bad | Good |
 |---------|-----|------|
-| Money | `amount: float` | `amount: {"value": N, "currency": "X"}` |
+| Money | `amount: float` | `amount: {"value": "150.00" (decimal string), "currency": "X"}` |
 | Date | `date: str` ("next Friday") | `date: str` (YYYY-MM-DD) |
 | Phone | `phone: str` (free text) | `phone: str` (E.164: +1234567890) |
 | Pagination | `page: int` | `cursor: str` (opaque, forward-only) |
@@ -286,8 +293,8 @@ The qualified name travels with the value: `loans_prepare_request` returns a `lo
 from typing import TypedDict, Literal
 
 class Money(TypedDict):
-    value: float
-    currency: str  # ISO 4217
+    value: str       # decimal string, e.g. "150.00" — never float (Principle 3)
+    currency: str    # ISO 4217
 
 class PaginatedRequest(TypedDict, total=False):
     cursor: str
@@ -301,7 +308,9 @@ class PaginatedResponse(TypedDict):
 
 ## Principle 6: Rich Response Semantics
 
-Every tool response should include enough context for the agent to **act on the result without additional calls**. Use a standard response envelope.
+Every tool response should include enough context for the agent to **act on the result without additional calls** — while staying **high-signal**: every field is paid for in context. Anthropic's guidance is to include "only the fields Claude needs to reason about its next step"; the envelope below is our richer house pattern, so apply it with judgment, not as boilerplate.
+
+**Do not duplicate the same content across fields.** If `formatted` and `message_for_user` would be identical (the common case), emit only `formatted` — the model owns user-facing phrasing by default.
 
 ### Standard Response Pattern
 
@@ -311,8 +320,8 @@ return {
     "data": {
         "account_id": "ACC-12345678",
         "balances": [
-            {"type": "checking", "available": {"value": 2500.00, "currency": "USD"}},
-            {"type": "savings", "available": {"value": 15000.00, "currency": "USD"}}
+            {"type": "checking", "available": {"value": "2500.00", "currency": "USD"}},
+            {"type": "savings", "available": {"value": "15000.00", "currency": "USD"}}
         ]
     },
 
@@ -350,15 +359,34 @@ return {
 | Field | Required | Purpose |
 |-------|----------|---------|
 | `data` | Yes | Structured data for programmatic use |
-| `formatted` | Yes | Pre-formatted text for display |
-| `available_actions` | Yes | Next possible tool calls (see Principle 7) |
-| `message_for_user` | Yes | Suggested response to relay |
-| `formatted_spoken` | No | Voice-optimized version |
+| `formatted` | Recommended | Pre-formatted text for display (omit if `data` is trivially readable) |
+| `available_actions` | When state-dependent | Next possible tool calls (see Principle 7) |
+| `message_for_user` | No | Suggested phrasing — only when correct wording requires backend knowledge (e.g. exact regulatory language). Otherwise the model phrases it better from `formatted` |
+| `formatted_spoken` | No | Voice channels only |
 | `metadata` | No | Timestamps, cache hints, debug info |
+
+### Token Budget
+
+The biggest gap in naive envelopes is unbounded size. Industry practice (Anthropic):
+
+- **Pagination, filtering, and truncation with sensible defaults** on any tool whose response can grow (lists, logs, search). Claude Code truncates tool responses at 25k tokens by default — design well under that.
+- **`response_format: Literal["concise", "detailed"] = "concise"`** on read-heavy tools: concise returns what's needed to continue the flow; detailed adds IDs/metadata for chaining. (Anthropic's Slack example: 206 → 72 tokens.)
+- **When truncating, say so and steer recovery** in the response: "Showing 10 of 432. Use `date_from` or `query` to narrow."
+
+### Trust note
+
+Tool results are **data, not instructions** (OWASP LLM01 — indirect prompt injection). Fields like `message_for_user` and `suggestions` are safe only because these are first-party tools we control end-to-end. Never design agents to obey such fields from third-party or user-content-bearing servers.
 
 ## Principle 7: Available Actions (Tool Graph)
 
-Every tool response **MUST** include `available_actions` — a list of logical next steps. This creates a navigable **tool graph** that guides the agent through multi-step workflows without hardcoded orchestration.
+Include `available_actions` — a short list of logical next steps — **when the valid next actions depend on state the agent can't infer from the static catalog** (a pending transfer exposes `confirm`/`cancel`; a zero balance removes `transfer_funds`). This creates a navigable **tool graph** that guides the agent through multi-step workflows without hardcoded orchestration.
+
+Calibration (this is our house pattern, not an industry standard — no vendor or the MCP spec mandates next-action menus, and they cost tokens on every response):
+
+- **Include** when actions are **state-dependent** or the response opens a multi-step flow (`pending_confirmation` is the canonical case — `confirmation_method` / `cancel_method` are available_actions in essence).
+- **Omit** on terminal or simple read tools where the next step is obvious from the catalog — a static menu repeated on every call is low-signal context.
+- **Cap at ~3** actions, most-likely first. A menu of seven is a catalog, not guidance.
+- Validate the value with evals (`/design-evals`): compare success rate, call count, and tokens with and without the menu before mandating it catalog-wide.
 
 ### Tool Graph Example
 
@@ -456,8 +484,8 @@ Classify every tool by its **impact level** to determine confirmation requiremen
 
 | Level | Category | Description | Confirmation | Example |
 |-------|----------|-------------|-------------|---------|
-| 1 | Read | Retrieve data, no side effects | None | `get_account_balances`, `search_transactions` |
-| 2 | Create/List | Create new resources, list data | None | `create_support_ticket`, `list_accounts` |
+| 1 | Read | Retrieve or list data, no side effects | None | `get_account_balances`, `search_transactions`, `list_accounts` |
+| 2 | Create | Create new low-stakes resources | None | `create_support_ticket`, `add_contact` |
 | 3 | Update | Modify existing resources | Agent confirms | `change_shipping_address`, `update_profile` |
 | 4 | Financial | Money movement, charges | User confirms | `transfer_funds`, `process_refund` |
 | 5 | Irreversible | Cannot be undone | Explicit user approval | `close_account`, `delete_all_data` |
@@ -469,26 +497,41 @@ from deepagents import create_deep_agent
 from langgraph.checkpoint.memory import MemorySaver
 
 # Define tools by level
-level_1_tools = [get_account_balances, search_transactions, find_customer]
-level_2_tools = [create_support_ticket, list_accounts]
+level_1_tools = [get_account_balances, search_transactions, find_customer, list_accounts]
+level_2_tools = [create_support_ticket]
 level_3_tools = [change_shipping_address, update_profile]
 level_4_tools = [transfer_funds, process_refund]
 level_5_tools = [close_account, delete_all_data]
 
 all_tools = level_1_tools + level_2_tools + level_3_tools + level_4_tools + level_5_tools
 
+# interrupt_on maps TOOL NAMES to interrupt configs — list only Level 3+ tools.
+# (Levels 1-2 run without interruption.)
 agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You handle all account operations.",
     tools=all_tools,
     checkpointer=MemorySaver(),
     interrupt_on={
-        "tool": {
-            "allowed_decisions": ["approve", "reject", "modify"],
-        }
-    },  # Pauses before sensitive tools for human approval
+        tool.name: {"allowed_decisions": ["approve", "reject", "modify"]}
+        for tool in level_3_tools + level_4_tools + level_5_tools
+    },
 )
 ```
+
+### Mapping to MCP Tool Annotations
+
+When generating MCP tools, the level **must** also be expressed as standard [`ToolAnnotations`](https://modelcontextprotocol.io/specification/2025-06-18/server/tools) (spec 2025-03-26) — client safety UIs key off annotations, not description prose:
+
+| Level | `readOnlyHint` | `destructiveHint` | `idempotentHint` |
+|-------|---------------|-------------------|------------------|
+| 1 Read | `true` | — | — |
+| 2 Create | `false` | `false` (additive) | `false` |
+| 3 Update | `false` | `false` | `true` if idempotency_key supported |
+| 4 Financial | `false` | `true` | `true` if idempotency_key supported |
+| 5 Irreversible | `false` | `true` | `false` |
+
+Keep the `Operation Level: N` prose in the description too (it carries the financial/irreversible distinction the four booleans can't), but remember the spec's caveat: annotations are **hints** — clients "MUST consider tool annotations to be untrusted unless they come from trusted servers". Enforcement lives server-side.
 
 ### Tool Metadata for Level Declaration
 
@@ -513,6 +556,12 @@ def transfer_funds(
 ## Principle 9: Delegated Confirmations
 
 For operations at **Level 3 and above**, the tool should not execute immediately. Instead, return a `pending_confirmation` status with details for the agent to present to the user.
+
+**Choose ONE confirmation layer per deployment.** This pattern and Principle 8's `interrupt_on` solve the same problem; enabling both makes the user approve the same operation twice:
+
+- **Tool-level `pending_confirmation`** (this principle): portable across any client, previews computed details (fees, arrival dates), leaves an audit trail of what was approved. Prefer it for product-grade agents.
+- **Framework/client HITL** (`interrupt_on`, MCP client consent, or MCP **elicitation** — the in-protocol way for a server to request user confirmation mid-operation): simpler, no extra tools, but the preview is whatever the framework shows.
+- Stack both **only for Level 5**, where reinforced confirmation is the point.
 
 ### Confirmation Response Pattern
 
@@ -544,7 +593,7 @@ def transfer_funds(
                 "to_account": to_account,
                 "to_account_name": "Joint Savings",
                 "estimated_arrival": "2025-01-16",
-                "fee": {"value": 0.00, "currency": "USD"}
+                "fee": {"value": "0.00", "currency": "USD"}
             },
             "confirmation_method": {
                 "tool": "confirm_transfer",
@@ -645,9 +694,11 @@ def process_refund(
 |------|-------------|
 | Format | UUID v4 or deterministic `{operation}-{entity_id}-{timestamp}` |
 | Scope | Per-tool, per-user |
-| TTL | 24 hours minimum for financial operations |
+| TTL | 24 hours minimum for financial operations (Stripe's exact policy) |
 | Collision behavior | Return original result, do NOT execute again |
-| Agent responsibility | Generate key before first call, reuse on retries |
+| **Who generates it** | **The tool/framework, never the LLM.** Generate server-side on first call (`key = idempotency_key or str(uuid.uuid4())`) and return it in the response; the agent only **reuses** the returned key on retries |
+
+**Why the LLM must not invent keys:** idempotency needs real entropy from the caller (Stripe: "V4 UUIDs… with enough entropy to avoid collisions"), and LLMs are memorization-driven pseudo-random generators — they repeat famous example UUIDs and biased values (arXiv 2502.19965: GPT-4o answers "7" 92/100 times when asked for a random number). Two distinct operations getting the same hallucinated key means one silently never executes. In the prepare/confirm flow (Principle 9), the prepared `transfer_id` already serves as the idempotency token for execution.
 
 ## Principle 11: Secure Parameters
 
@@ -716,7 +767,13 @@ These two pulls are not in conflict — they answer different questions:
 The other two catalog decisions are detailed below and in the checklist:
 
 - **Bounded Contexts** — group tools by business domain, max 10 per domain. See [Tool Organization by Domain](#tool-organization-by-domain) below (`agent-native` #6).
-- **Parity** — every UI action has a corresponding tool, or a documented intentional exclusion. See the Coverage section of the [Tool Quality Checklist](references/tool-quality-checklist.md) (`agent-native` #7).
+- **Parity** — everything the user can **accomplish** in the UI, the agent can accomplish through tools (or it's a documented intentional exclusion). Parity is of **outcomes, not buttons**: one consolidated tool may cover three screens (Anthropic's `get_customer_context` example), and wrapping every endpoint 1:1 is the failure mode Anthropic explicitly warns against ("tools that merely wrap existing software functionality or API endpoints"). See the Coverage section of the [Tool Quality Checklist](references/tool-quality-checklist.md) (`agent-native` #7).
+
+### Catalog size & namespacing (evidence-backed limits)
+
+- **Keep the *active* tool set per agent/subagent at ≤20.** OpenAI recommends <20 functions; Gemini says 10-20 max; Anthropic measured that selection "degrades significantly once you exceed 30–50 available tools"; published evals show non-linear accuracy cliffs as catalogs grow. Our "max 10 per domain + subagents at 15+" rule sits comfortably inside all of these.
+- **For large catalogs, defer/discover instead of loading everything**: tool search (Anthropic/OpenAI both ship it) or dynamic per-context tool selection.
+- **Namespace with a domain prefix when the catalog spans domains** (`loans_simulate`, `accounts_get_balances`, per-service `github_`, `slack_`): Anthropic recommends it for disambiguation and search discoverability, with the honest caveat that prefix vs suffix effects "vary by LLM" — validate with your own evals. Single-domain catalogs (like the examples here) can stay unprefixed.
 
 ## Tool Organization by Domain
 
@@ -820,7 +877,7 @@ from typing import TypedDict, Literal
 
 
 class Money(TypedDict):
-    value: float
+    value: str       # decimal string, e.g. "150.00" — never float
     currency: str
 
 
@@ -881,12 +938,16 @@ def get_account_balances(account_id: str) -> dict:
 
 ## MCP Generation Pattern
 
-JSON tool definition following Model Context Protocol (MCP) format.
+JSON tool definition following Model Context Protocol (MCP) format. Three spec features are mandatory in our generated tools:
+
+1. **`annotations`** (spec 2025-03-26) — the standard read-only/destructive/idempotent classification; map from the Operation Level (see Principle 8 table).
+2. **`outputSchema`** (spec 2025-06-18) — declare the structure of results; the server returns `structuredContent` conforming to it (this is the spec-native home for the envelope's `data`).
+3. Cursor-based pagination params where applicable (the spec's pagination model is opaque cursors).
 
 ```json
 {
   "name": "get_account_balances",
-  "description": "Retrieve current balances for all sub-accounts (checking, savings, credit).\n\nOperation Level: 1 (Read)\n\nUse when the user says: \"check my balance\", \"how much do I have\", \"account balance\", \"what's in my account\".",
+  "description": "Retrieve current balances for all sub-accounts (checking, savings, credit).\n\nOperation Level: 1 (Read)\n\nUse when the user says: \"check my balance\", \"how much do I have\", \"account balance\". Do NOT use to search for an account by name — use find_account.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -897,6 +958,32 @@ JSON tool definition following Model Context Protocol (MCP) format.
       }
     },
     "required": ["account_id"]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "balances": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "type": {"type": "string"},
+            "available": {
+              "type": "object",
+              "properties": {
+                "value": {"type": "string", "description": "Decimal string"},
+                "currency": {"type": "string"}
+              }
+            }
+          }
+        }
+      },
+      "as_of": {"type": "string", "format": "date-time"}
+    }
+  },
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
   }
 }
 ```
@@ -914,8 +1001,8 @@ JSON tool definition following Model Context Protocol (MCP) format.
         "type": "object",
         "description": "Money object with value and currency.",
         "properties": {
-          "value": {"type": "number", "minimum": 0.01, "description": "Amount to transfer."},
-          "currency": {"type": "string", "enum": ["USD", "EUR", "MXN"], "description": "ISO 4217 currency code."}
+          "value": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,2})?$", "description": "Amount to transfer as a decimal string, e.g. \"150.00\"."},
+          "currency": {"type": "string", "enum": ["USD", "EUR", "PYG"], "description": "ISO 4217 currency code."}
         },
         "required": ["value", "currency"]
       },
@@ -932,10 +1019,16 @@ JSON tool definition following Model Context Protocol (MCP) format.
       "idempotency_key": {
         "type": "string",
         "format": "uuid",
-        "description": "Unique key to prevent duplicate transfers. Generated if omitted."
+        "description": "Key from a previous attempt's response, to retry safely. Omit on first call — the server generates and returns one."
       }
     },
     "required": ["amount", "from_account", "to_account"]
+  },
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false
   }
 }
 ```
@@ -950,12 +1043,12 @@ Quick self-check:
 
 - [ ] Name describes domain operation, not CRUD (Principle 1)
 - [ ] Docstring includes trigger phrases (Principle 2)
-- [ ] Parameters use structured types with constraints (Principle 3)
+- [ ] Parameters use structured types with constraints; money is never a float (Principle 3)
 - [ ] Errors include code, message, remediation, and suggestions (Principle 4)
 - [ ] Terminology matches project-wide glossary (Principle 5)
-- [ ] Response includes data, formatted, available_actions, message_for_user (Principle 6)
-- [ ] available_actions lists logical next steps (Principle 7)
-- [ ] Operation level is declared and mapped to `interrupt_on` (Principle 8)
+- [ ] Response includes `data` (+ `formatted` where useful), no duplicated content, bounded size (Principle 6)
+- [ ] available_actions present where next steps are state-dependent, ≤3 (Principle 7)
+- [ ] Operation level is declared, mapped to `interrupt_on` and MCP annotations (Principle 8)
 - [ ] Level 3+ tools return pending_confirmation first (Principle 9)
 - [ ] Transactional tools accept idempotency_key (Principle 10)
 - [ ] No identity/credentials/tokens as parameters — injected by framework (Principle 11)

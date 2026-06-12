@@ -2,6 +2,11 @@
 
 Real-world examples from a 32-tool banking/fintech catalog. Each example demonstrates multiple AI-Friendly Tool Design principles in a complete, production-ready tool definition.
 
+**Two notes on reading the examples:**
+
+- **Money values**: amounts here are in PYG, a zero-decimal currency, so integer values are correct as-is. For decimal currencies use decimal **strings** (`{"value": "150.00", "currency": "USD"}`) — never IEEE-754 floats (Principle 3).
+- **Idempotency keys**: note that every transactional example generates the key **in tool code** (`key = idempotency_key or str(uuid.uuid4())`) and returns it in the response. The agent's only job is to pass the *returned* key back on retries — the LLM never invents one (Principle 10).
+
 ---
 
 ## Example 1: `get_account_balances`
