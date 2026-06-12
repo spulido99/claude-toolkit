@@ -266,7 +266,20 @@ Use **one term per concept** across all tools. Inconsistent naming forces the ag
 
 **Casing:** every parameter **and response field** name is `snake_case` — `installments_quantity` not `installmentsQuantity`, `request_token` not `Request-Token`. Mixed casing forces the agent to track variants and raises parameter-error rates. (Tool names follow the same rule — Principle 1.)
 
-### Enforcement Pattern
+### Qualify generic identifiers by domain
+
+A bare `id`, `request_id`, `reference`, or `token` is ambiguous the moment **more than one kind** can exist in the catalog. If you have loan requests, transfer requests, and support requests, a field called `request_id` forces the agent to track *which* request it holds and risks passing the wrong one to the wrong tool. Qualify it:
+
+| Bad (ambiguous) | Good (domain-qualified) |
+|-----------------|--------------------------|
+| `request_id` | `loan_request_id`, `transfer_request_id` |
+| `id` (returned by `get_loan`) | `loan_id` |
+| `reference` | `payment_reference`, `refund_reference` |
+| `token` | `confirmation_token` |
+
+The qualified name travels with the value: `loans_prepare_request` returns a `loan_request_id`, and `loans_disburse` accepts exactly that `loan_request_id` — the agent never has to guess what a generic `request_id` refers to. Stay generic **only** when the concept is truly catalog-wide and single-meaning (`cursor`, `idempotency_key`).
+
+
 
 ```python
 # Define shared types once, reuse everywhere
@@ -650,12 +663,12 @@ This is a **trust-boundary** principle, independent of data typing (Principle 3)
 | Credentials: `api_key`, `token`, `secret`, `password` | Logged or leaked through the model | Framework credentials |
 | Fraud/anti-abuse tokens (e.g. device attestation) | Spoofable if the model controls them | Framework / gateway header |
 
-Business identifiers the agent legitimately **discovers and passes** (an `account_id` returned by a search tool, a `request_id` from a draft) are fine. The distinction is **caller identity / credentials vs. operands**.
+Business identifiers the agent legitimately **discovers and passes** (an `account_id` returned by a search tool, a `loan_request_id` from a draft) are fine. The distinction is **caller identity / credentials vs. operands**. (Note the domain-qualified `loan_request_id`, not a bare `request_id` — Principle 5.)
 
 ```python
 # Bad: identity, credential, and fraud token as parameters — the LLM controls them
 @tool
-def disburse_loan(request_id: str, user_id: str, incognia_token: str) -> dict:
+def disburse_loan(loan_request_id: str, user_id: str, incognia_token: str) -> dict:
     ...
 
 # Good: only the operand is a parameter; identity + fraud token injected by framework
@@ -663,7 +676,7 @@ from langchain.tools import tool, ToolRuntime
 
 @tool
 def loans_disburse(
-    request_id: str,
+    loan_request_id: str,
     idempotency_key: str,
     runtime: ToolRuntime[SecureContext],  # invisible to LLM: person_code, fraud token
 ) -> dict:
@@ -686,7 +699,7 @@ Size a tool to a **unit of user intent or decision**, not to a backend endpoint 
 
 | Failure | Symptom | Fix |
 |---------|---------|-----|
-| **Over-fragmented** | Two tools are always called in sequence and the intermediate result has no standalone use to the agent (e.g. a `request_id` you can only pass to the next call) | **Merge** them into one tool |
+| **Over-fragmented** | Two tools are always called in sequence and the intermediate result has no standalone use to the agent (e.g. a `loan_request_id` you can only pass to the next call) | **Merge** them into one tool |
 | **Over-bundled** | One tool hides steps the agent would want to compose, skip, retry, or recover from independently (validate → check stock → pay) | **Split** into atomic primitives ([Anti-Pattern 13](../patterns/references/anti-patterns.md)) |
 
 These two pulls are not in conflict — they answer different questions:
@@ -696,7 +709,7 @@ These two pulls are not in conflict — they answer different questions:
 
 > Merging two backend endpoints behind one tool does **not** violate Anti-Pattern 13. #13 forbids hiding decision points the agent needs; it does not require exposing every internal step. The natural seam is the `pending_confirmation` boundary (Principle 9): everything up to "ready to execute" is usually **one** *prepare* tool, and execution is **one** *execute* tool — no matter how many endpoints sit behind each.
 
-**Example:** `loans_create_request` (returns a bare `request_id`) + `loans_confirm_request` (computes the final terms) should be **one** `loans_prepare_request` tool that returns `pending_confirmation` — the `request_id` alone is never a useful stopping point for the agent.
+**Example:** `loans_create_request` (returns a bare `loan_request_id`) + `loans_confirm_request` (computes the final terms) should be **one** `loans_prepare_request` tool that returns `pending_confirmation` — the `loan_request_id` alone is never a useful stopping point for the agent.
 
 ### Bounded Contexts & Parity
 

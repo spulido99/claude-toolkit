@@ -294,6 +294,19 @@ Usa **un solo término por concepto** en todo el catálogo de tools. Los nombres
 | Query de búsqueda | `query` | `q`, `search_term`, `keyword` |
 | Orden | `sort_by`, `sort_order` | `order`, `ordering`, `sort_field` |
 
+### Califica los identificadores genéricos por dominio
+
+Un `id`, `request_id`, `reference` o `token` a secas es **ambiguo** en cuanto puede existir más de un tipo en el catálogo. Si tienes solicitudes de préstamo, de transferencia y de soporte, un campo llamado `request_id` obliga al agente a recordar *cuál* solicitud tiene en la mano — y arriesga que pase la equivocada a la tool equivocada. Califícalo por dominio:
+
+| ❌ Ambiguo | ✅ Calificado por dominio |
+|-----------|---------------------------|
+| `request_id` | `loan_request_id`, `transfer_request_id` |
+| `id` (devuelto por `get_loan`) | `loan_id` |
+| `reference` | `payment_reference`, `refund_reference` |
+| `token` | `confirmation_token` |
+
+El nombre calificado viaja con el valor: `loans_prepare_request` devuelve un `loan_request_id` y `loans_disburse` acepta exactamente ese `loan_request_id` — el agente nunca tiene que adivinar a qué se refiere un `request_id` genérico. Quédate con el nombre genérico **solo** cuando el concepto es realmente transversal y de un solo significado (`cursor`, `idempotency_key`).
+
 **En la práctica:** mantén un **glosario del proyecto** (una tabla como esta, versionada en el repo) y define los tipos compartidos (Money, paginación) **una sola vez** como `$defs` de JSON Schema reutilizados por todas las tools.
 
 ```json
@@ -558,7 +571,7 @@ Este es un principio de **frontera de confianza**, independiente del tipado (Pri
   "inputSchema": {
     "type": "object",
     "properties": {
-      "request_id": {"type": "string"},
+      "loan_request_id": {"type": "string"},
       "user_id": {"type": "string"},
       "fraud_token": {"type": "string"}
     }
@@ -573,15 +586,15 @@ Este es un principio de **frontera de confianza**, independiente del tipado (Pri
   "inputSchema": {
     "type": "object",
     "properties": {
-      "request_id": {"type": "string", "description": "Confirmed loan request to disburse."},
+      "loan_request_id": {"type": "string", "description": "Confirmed loan request to disburse."},
       "idempotency_key": {"type": "string", "format": "uuid"}
     },
-    "required": ["request_id", "idempotency_key"]
+    "required": ["loan_request_id", "idempotency_key"]
   }
 }
 ```
 
-**La distinción clave:** los identificadores de negocio que el agente legítimamente **descubre y pasa** (un `account_id` devuelto por una tool de búsqueda, un `request_id` de un borrador) sí son parámetros válidos. La línea divisoria es **identidad del llamador / credenciales vs. operandos**.
+**La distinción clave:** los identificadores de negocio que el agente legítimamente **descubre y pasa** (un `account_id` devuelto por una tool de búsqueda, un `loan_request_id` de un borrador) sí son parámetros válidos. La línea divisoria es **identidad del llamador / credenciales vs. operandos**.
 
 **Regla MCP:** si está en `inputSchema`, el modelo puede falsificarlo. Identidad y credenciales llegan por la capa de transporte/gateway (OAuth de la sesión MCP, headers como `x-claims`) y se resuelven en el servidor.
 
@@ -597,12 +610,12 @@ Dimensiona cada tool a una **unidad de intención o decisión del usuario**, no 
 
 | Fallo | Síntoma | Solución |
 |-------|---------|----------|
-| **Sobre-fragmentada** | Dos tools siempre se llaman en secuencia y el resultado intermedio no tiene uso independiente (p. ej. un `request_id` que solo sirve para la siguiente llamada) | **Fusionar** en una tool |
+| **Sobre-fragmentada** | Dos tools siempre se llaman en secuencia y el resultado intermedio no tiene uso independiente (p. ej. un `loan_request_id` que solo sirve para la siguiente llamada) | **Fusionar** en una tool |
 | **Sobre-empaquetada** | Una tool esconde pasos que el agente querría componer, saltarse, reintentar o recuperar de forma independiente (validar → verificar stock → pagar) | **Dividir** en primitivas atómicas |
 
 La costura natural es la frontera de `pending_confirmation` (Principio 9): todo lo previo a "listo para ejecutar" suele ser **una** tool de *preparación*, y la ejecución es **una** tool de *ejecución* — sin importar cuántos endpoints haya detrás de cada una.
 
-**Ejemplo:** `loans_create_request` (devuelve solo un `request_id`) + `loans_confirm_request` (calcula los términos finales) deberían ser **una sola** `loans_prepare_request` que devuelva `pending_confirmation` — el `request_id` solo nunca es un punto de parada útil para el agente.
+**Ejemplo:** `loans_create_request` (devuelve solo un `loan_request_id`) + `loans_confirm_request` (calcula los términos finales) deberían ser **una sola** `loans_prepare_request` que devuelva `pending_confirmation` — el `loan_request_id` solo nunca es un punto de parada útil para el agente.
 
 ### Bounded contexts — agrupar por dominio
 
