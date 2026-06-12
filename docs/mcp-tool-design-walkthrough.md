@@ -281,7 +281,7 @@ Respuesta — fíjate que **no desembolsa**, devuelve `pending_confirmation`:
 }
 ```
 
-- **P8:** Nivel 4 declarado en la descripción + `destructiveHint` → el cliente MCP exige aprobación humana (push/OTP/biometría) antes de ejecutar.
+- **P8:** Nivel 4 declarado en la descripción + `destructiveHint` → el cliente MCP exige aprobación humana explícita del usuario en la conversación antes de ejecutar.
 - **P11:** **no recibe `authToken`** ni `userId`. La autorización viaja por la sesión autenticada; el `loan_request_id` es un operando legítimo que el agente descubrió en el paso anterior.
 - **P5:** el campo se llama `loan_request_id`, no `request_id` a secas — así, si el catálogo también tiene `transfer_request_id` o `support_request_id`, el agente nunca confunde cuál pasa a cuál tool.
 - **P10:** acepta `idempotency_key`. Si la red falla y el agente reintenta, el backend reconoce la llave y devuelve el resultado original — **no desembolsa dos veces**.

@@ -349,8 +349,8 @@
       <tr><td>1</td><td>Read</td><td>Ninguna</td><td>get_account_balances</td></tr>
       <tr><td>2</td><td>Create/List</td><td>Ninguna</td><td>create_support_ticket</td></tr>
       <tr><td>3</td><td>Update</td><td>Agente confirma</td><td>change_address</td></tr>
-      <tr><td class="x">4</td><td>Financial</td><td class="x">Usuario (OTP/biometría)</td><td>transfer_funds</td></tr>
-      <tr><td class="x">5</td><td>Irreversible</td><td class="x">Multi-factor + delay</td><td>close_account</td></tr>
+      <tr><td class="x">4</td><td>Financial</td><td class="x">Usuario confirma explícito</td><td>transfer_funds</td></tr>
+      <tr><td class="x">5</td><td>Irreversible</td><td class="x">Confirmación reforzada + cancelación</td><td>close_account</td></tr>
     </table>
   </section>
 
@@ -362,7 +362,7 @@
       <div class="step"><span class="s">1</span><span class="d">El agente llama <code>loans_prepare_request</code> → valida y calcula</span></div>
       <div class="step"><span class="s">2</span><span class="d">Devuelve <code>status: "pending_confirmation"</code> con todos los detalles</span></div>
       <div class="step"><span class="s">3</span><span class="d">El agente presenta: <em>"Préstamo de $1.000.000, cuota $91.680. ¿Confirmo?"</em></span></div>
-      <div class="step"><span class="s">4</span><span class="d">El usuario aprueba (chat / push / biometría según el nivel)</span></div>
+      <div class="step"><span class="s">4</span><span class="d">El usuario aprueba <strong>explícitamente</strong> en la conversación</span></div>
       <div class="step"><span class="s">5</span><span class="d">El agente llama <code>loans_disburse</code> → <strong>ahora sí</strong> ejecuta</span></div>
     </div>
   </section>
