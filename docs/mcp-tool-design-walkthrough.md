@@ -128,7 +128,7 @@ El error de raíz es mapear 1 endpoint = 1 tool. El agente no piensa en endpoint
 3. *"Sí, dale"* → ejecutar el desembolso
 4. *"¿Cómo va mi préstamo?"* → consultar estado
 
-Eso son **cuatro tools**, no seis. Los tres endpoints `create → simulate → confirm` colapsan en **una sola** tool de preparación: el `requestId` intermedio nunca es un punto de parada útil para el usuario. La costura natural es el `pending_confirmation` (P9): todo lo previo a "listo para desembolsar" es *una* tool, y el desembolso es *otra*.
+Eso son **cuatro tools**, no seis. Los tres endpoints `create → simulate → confirm` colapsan en **una sola** tool de preparación: el `loan_request_id` intermedio nunca es un punto de parada útil para el usuario. La costura natural es el `pending_confirmation` (P9): todo lo previo a "listo para desembolsar" es *una* tool, y el desembolso es *otra*.
 
 ```
 get_loan_offers        →  intención 1 (Nivel 1: Read)
@@ -241,7 +241,7 @@ Respuesta — fíjate que **no desembolsa**, devuelve `pending_confirmation`:
     "confirmation_method": {
       "tool": "loans_disburse",
       "params": {
-        "request_id": "req_abc123",
+        "loan_request_id": "lreq_abc123",
         "idempotency_key": "550e8400-e29b-41d4-a716-446655440000"
       }
     },
@@ -264,10 +264,10 @@ Respuesta — fíjate que **no desembolsa**, devuelve `pending_confirmation`:
   "inputSchema": {
     "type": "object",
     "properties": {
-      "request_id": {
+      "loan_request_id": {
         "type": "string",
-        "description": "The prepared request to disburse, from loans_prepare_request.",
-        "pattern": "^req_[a-z0-9]+$"
+        "description": "The prepared loan request to disburse, from loans_prepare_request.",
+        "pattern": "^lreq_[a-z0-9]+$"
       },
       "idempotency_key": {
         "type": "string",
@@ -275,14 +275,15 @@ Respuesta — fíjate que **no desembolsa**, devuelve `pending_confirmation`:
         "description": "Unique key to prevent duplicate disbursement. Reuse the one from loans_prepare_request on retries."
       }
     },
-    "required": ["request_id", "idempotency_key"]
+    "required": ["loan_request_id", "idempotency_key"]
   },
   "annotations": { "destructiveHint": true, "idempotentHint": true }
 }
 ```
 
 - **P8:** Nivel 4 declarado en la descripción + `destructiveHint` → el cliente MCP exige aprobación humana (push/OTP/biometría) antes de ejecutar.
-- **P11:** **no recibe `authToken`** ni `userId`. La autorización viaja por la sesión autenticada; el `request_id` es un operando legítimo que el agente descubrió en el paso anterior.
+- **P11:** **no recibe `authToken`** ni `userId`. La autorización viaja por la sesión autenticada; el `loan_request_id` es un operando legítimo que el agente descubrió en el paso anterior.
+- **P5:** el campo se llama `loan_request_id`, no `request_id` a secas — así, si el catálogo también tiene `transfer_request_id` o `support_request_id`, el agente nunca confunde cuál pasa a cuál tool.
 - **P10:** acepta `idempotency_key`. Si la red falla y el agente reintenta, el backend reconoce la llave y devuelve el resultado original — **no desembolsa dos veces**.
 
 Respuesta exitosa:
@@ -361,7 +362,7 @@ Usuario: "necesito un millón a 12 meses"
       ↳ devuelve pending_confirmation con cuotas y total     (P9)
       ↳ "¿Confirmo el desembolso?"                           (P6)
 Usuario: "sí"
-  → loans_disburse(request_id, idempotency_key)              (P8, P10, P11)
+  → loans_disburse(loan_request_id, idempotency_key)         (P8, P10, P11)
       ↳ completed + available_actions a get_loan_status      (P7)
 ```
 

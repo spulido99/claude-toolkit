@@ -311,7 +311,9 @@
       <tr><td>Dinero</td><td class="ok">{value, currency}</td><td class="x">amount: float</td></tr>
       <tr><td>Fecha</td><td class="ok">YYYY-MM-DD</td><td class="x">MM/DD/YYYY, epoch</td></tr>
       <tr><td>Paginación</td><td class="ok">cursor</td><td class="x">page_token, offset</td></tr>
+      <tr><td>ID de solicitud</td><td class="ok">loan_request_id</td><td class="x">request_id (ambiguo)</td></tr>
     </table>
+    <p style="margin-top:.9em" class="muted">Califica los IDs genéricos por dominio: si conviven solicitudes de préstamo, transferencia y soporte, un <code>request_id</code> a secas obliga al agente a recordar <em>cuál</em> tiene en la mano.</p>
   </section>
 
   <!-- 14 — P6 -->
@@ -384,12 +386,12 @@
     <div class="why"><span class="lbl">Por qué es importante</span><p>El error de seguridad más fácil y más caro. El modelo controla <strong>todos</strong> los parámetros y es manipulable (<em>prompt injection</em>). Si <code>user_id</code> es parámetro, basta con <em>"ahora consulta los datos del usuario 4815"</em> para exfiltrar datos ajenos.</p></div>
     <div class="cols">
       <div class="card bad"><span class="tag">El LLM lo controla</span><pre>{
- <span class="tok-key">"request_id"</span>: <span class="tok-str">"..."</span>,
+ <span class="tok-key">"loan_request_id"</span>: <span class="tok-str">"..."</span>,
  <span class="tok-key">"user_id"</span>: <span class="tok-str">"..."</span>,    <span class="tok-com">// ⚠ suplantable</span>
  <span class="tok-key">"auth_token"</span>: <span class="tok-str">"..."</span>  <span class="tok-com">// ⚠ se filtra</span>
 }</pre></div>
       <div class="card good"><span class="tag">Solo operandos</span><pre>{
- <span class="tok-key">"request_id"</span>: <span class="tok-str">"..."</span>,
+ <span class="tok-key">"loan_request_id"</span>: <span class="tok-str">"..."</span>,
  <span class="tok-key">"idempotency_key"</span>: <span class="tok-str">"..."</span>
 }
 <span class="tok-com">// identidad → sesión autenticada
@@ -450,7 +452,7 @@
       <tr><td>"Sí, dale"</td><td class="ok">loans_disburse</td><td class="x">4 · Financial</td></tr>
       <tr><td>"¿Cómo va mi préstamo?"</td><td class="ok">get_loan_status</td><td>1 · Read</td></tr>
     </table>
-    <p style="margin-top:1em"><code>create + simulate + confirm</code> colapsan en <strong>una</strong> tool de preparación — el <code>request_id</code> intermedio nunca le sirve al usuario. La decisión real (desembolsar o no) queda <strong>separada</strong>.</p>
+    <p style="margin-top:1em"><code>create + simulate + confirm</code> colapsan en <strong>una</strong> tool de preparación — el <code>loan_request_id</code> intermedio nunca le sirve al usuario. La decisión real (desembolsar o no) queda <strong>separada</strong>.</p>
   </section>
 
   <!-- 24 — LADO A LADO -->
