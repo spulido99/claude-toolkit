@@ -67,7 +67,7 @@ As the agent grows, assess its architecture and evolve it:
 ```
 # Morning: working on a banking agent
 /assess src/agent.py                → Level 2, score 35/80
-/evolve src/agent.py                → Recommends "Extract Platform" pattern
+/evolve src/agent.py                → Recommends "Adopt Disclosure" pattern
                                        Guides step-by-step, re-scores after
 
 # After refactoring
@@ -84,7 +84,7 @@ As the agent grows, assess its architecture and evolve it:
 | Skill | Description | Key Commands |
 |-------|-------------|--------------|
 | **quickstart** | Getting started with DeepAgents | `/new-sdk-app`, `/design-agent` |
-| **architecture** | Agent topologies and bounded contexts | `/design-topology`, `/add-subagent` |
+| **architecture** | Topology by write coupling (assistant pattern default), bounded contexts as skills | `/design-topology`, `/add-subagent` |
 | **patterns** | System prompts, tool design, anti-patterns | — |
 | **tool-design** | AI-friendly tool design (11 principles) | `/design-tools`, `/add-tool`, `/tool-status` |
 | **evals** | Evals-Driven Development workflow | `/design-evals`, `/eval`, `/add-scenario`, `/eval-status`, `/eval-update` |
@@ -94,7 +94,7 @@ As the agent grows, assess its architecture and evolve it:
 
 | Agent | Description |
 |-------|-------------|
-| **agent-architect** | Designs agent topologies based on business capabilities and Team Topologies |
+| **agent-architect** | Designs agent topologies by write coupling — assistant pattern by default, read-only fan-out when justified |
 | **code-reviewer** | Reviews agent code for anti-patterns, security issues, and best practices |
 | **tool-architect** | Designs and generates AI-friendly tool catalogs (full or incremental mode) |
 | **eval-designer** | Creates eval scenarios from JTBD with happy path, edge case, and failure coverage |
@@ -139,7 +139,8 @@ As the agent grows, assess its architecture and evolve it:
 - `skills/patterns/references/api-cheatsheet.md` — Canonical API reference for `create_deep_agent`
 - `skills/tool-design/references/tool-quality-checklist.md` — 11-principle quality checklist for tools
 - `skills/evolution/references/maturity-model.md` — Complete 5-level maturity model
-- `skills/evolution/references/refactoring-patterns.md` — 9 refactoring patterns
+- `skills/architecture/references/assistant-pattern.md` — The default topology (single frontal agent, tool search, skills)
+- `skills/evolution/references/refactoring-patterns.md` — 10 refactoring patterns (disclosure first)
 
 ## License
 

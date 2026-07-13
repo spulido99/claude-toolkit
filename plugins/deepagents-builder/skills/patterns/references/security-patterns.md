@@ -230,6 +230,7 @@ def safe_remember(
 Before deploying customer-facing agents:
 
 - [ ] AGENTS.md protected via `FilesystemBackend(read_only=True)`
+- [ ] Skills library protected with `permissions` deny-write (it is a prompt-injection surface)
 - [ ] User context injected via `ToolRuntime`, not shared mutable state
 - [ ] User context is isolated per-user via `context_schema`
 - [ ] System instructions separated from user preferences via `CompositeBackend`
@@ -245,6 +246,7 @@ Before deploying customer-facing agents:
 |-------------|-----------|-----------|--------|
 | System Prompt | `system_prompt=` parameter | No | All users |
 | AGENTS.md | `memory=` + `FilesystemBackend(read_only=True)` | No (protected) | All users |
+| Skills library | `skills=` + `permissions` deny-write over the skills directory (absolute-glob deny-write in interrupt mode requires deepagents >= 0.6.8) | No (protected) | All users |
 | User Context | `context_schema` + `ToolRuntime` | No (injected per-request) | Per-user |
 | User Preferences | Custom tool + `StoreBackend` | Yes (validated) | Per-user |
 | Session State | Checkpointer | Yes | Per-session |

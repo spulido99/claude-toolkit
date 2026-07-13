@@ -42,11 +42,13 @@ No existing DeepAgents agent found.
 
 Parse the existing agent configuration:
 
-1. Extract `subagents=[]` list: names, descriptions, tool counts, system_prompt structure, model overrides
-2. Detect topology pattern (Stream-Aligned / Platform-Supported / Domain-Specialized)
+1. Extract `subagents=[]` list: names, descriptions, tool lists, system_prompt structure, model overrides
+2. Detect topology pattern (assistant / read-only fan-out / hybrid — see the architecture skill)
 3. Extract naming convention (kebab-case suffixes like `-specialist`, `-platform`)
 4. Extract prompt style (section headings used in existing system_prompts)
-5. Count cognitive load per subagent
+5. Note each subagent's tool list and whether any tool is write-capable
+
+Before proceeding, apply the **write-coupling guard** (agent-architect Step 8.1b): the new capability must be read-only, parallelizable work whose episode value pays the ~15x token overhead. If it writes in a thread coupled with the main agent's decisions, recommend keeping it as tools on the main agent (with tool search if the catalog is 10+) or packaging the domain as a skill instead.
 
 Report summary to user:
 ```
@@ -100,7 +102,8 @@ Run inline anti-pattern checks on the updated architecture:
 | One-Time Subagent | warn | New subagent has only 1 tool |
 | Unclear Boundaries | error | Description overlaps with existing subagent |
 | Vocabulary Collision | warn | Same domain terms used across subagents |
-| God Agent | error | Any subagent exceeds 10 tools |
+| God Agent | error | Any agent reaches 10+ tools without tool search/skills |
+| Fragmented Writes | error | New subagent holds write-capable tools coupled to the main thread |
 | Premature Decomposition | warn | Total < 10 tools with 2+ subagents |
 
 Output confirmation:

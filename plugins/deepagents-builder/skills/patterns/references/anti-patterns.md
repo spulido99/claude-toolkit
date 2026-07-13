@@ -34,32 +34,40 @@ subagents = [
 ]
 ```
 
-## Anti-Pattern 2: God Agent
+## Anti-Pattern 2: God Agent (redefined)
 
-**Symptom**: Single agent with > 30 tools, poor tool selection.
+**Symptom**: A large tool catalog **without a disclosure mechanism** (no tool search, no skills) plus tool name/description overlap — the agent drowns in ambiguous definitions and misselects tools.
+
+> **Historical note**: this anti-pattern used to be defined as ">30 tools in one agent", with "split into subagents by domain" as the fix. That was wrong on both ends: the problem is overlap and missing disclosure, not the number, and tool-selection degradation past 30-50 tools motivates **tool search** — splitting a write-coupled agent into stateless subagents loses the thread at ~15x the token cost.
 
 **Example**:
 ```python
-# ❌ BAD: Cognitive overload
-main_agent = create_react_agent(
+# ❌ BAD: 50+ overlapping definitions all loaded up front, no disclosure
+main_agent = create_deep_agent(
     tools=[
+        get_resource, get_data, fetch_resource,  # overlapping names
         web_search, db_query, email, slack, jira, github,
         s3, lambda, ec2, rds, api_1, api_2, ... api_50
     ]
 )
 ```
 
-**Fix**: Platform subagents
+**Fix**: the cure ladder — in order, stopping as soon as the problem is solved
 ```python
-# ✅ GOOD: Grouped capabilities
-agent = create_react_agent(
-    subagents=[
-        {"name": "search-platform", "tools": [web, db, docs]},
-        {"name": "communication-platform", "tools": [email, slack]},
-        {"name": "devops-platform", "tools": [jira, github, aws]},
-        {"name": "integration-platform", "tools": [api_1...api_50]}
-    ]
+# 1) Tool design: consolidate and rename overlapping tools
+#    (get_resource/get_data/fetch_resource -> one well-named tool each domain)
+# 2) Tool search / deferred loading for the 10+ catalog — single agent keeps the tools.
+#    No native tool search in deepagents 0.6; compose via middleware=:
+agent = create_deep_agent(
+    tools=consolidated_tools,
+    middleware=[
+        # ProviderToolSearchMiddleware(),   # Anthropic/OpenAI server-side
+        LLMToolSelectorMiddleware(),        # provider-agnostic fallback
+    ],
+    skills=["./skills/"],  # bounded contexts as skills, progressive disclosure
 )
+# 3) Subagents ONLY if, after 1 and 2, read-only parallelizable work remains
+#    whose episode value pays the ~15x multi-agent token overhead.
 ```
 
 ## Anti-Pattern 3: Unclear Boundaries
@@ -119,7 +127,8 @@ agent = create_react_agent(
 agent = create_react_agent(
     tools=[query_data, generate_report, send_email]
 )
-# Add subagents only when cognitive load becomes problem
+# If the catalog grows: tool search + skills. Subagents only for
+# read-only parallelizable work that pays the ~15x token overhead.
 ```
 
 ## Anti-Pattern 5: Leaky Abstractions
@@ -596,7 +605,7 @@ Run through this checklist to identify anti-patterns (19 total):
 
 **Classic Anti-Patterns (1-10):**
 - [ ] Can subagents make conflicting decisions? (#1 Parallel Decision-Making)
-- [ ] Does main agent have > 30 tools? (#2 God Agent)
+- [ ] 10+ tools without tool search/skills, or overlapping tool names? (#2 God Agent)
 - [ ] Is it unclear when to use each subagent? (#3 Unclear Boundaries)
 - [ ] Are there subagents used only once? (#8 One-Time Subagent)
 - [ ] Do subagents share tool assignments? (#5 Leaky Abstractions)

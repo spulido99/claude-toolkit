@@ -90,6 +90,8 @@ Always: fetch_portfolio_data → calculate_metrics → get_benchmarks → genera
 
 **Characteristics**: Delegates, doesn't execute, maintains overview
 
+> **Topology guard**: use this prompt shape only on the read-only fan-out branch (delegated work is read-only, parallelizable, and the episode value pays the ~15x token overhead). For a conversational assistant with coupled writes, prefer the assistant pattern (single frontal agent) — see the architecture skill.
+
 ```python
 system_prompt = """You coordinate customer support operations across specialized teams.
 

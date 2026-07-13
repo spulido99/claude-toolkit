@@ -50,9 +50,9 @@ agent = create_deep_agent(
 | `tools` | `list` | List of tools (functions decorated with `@tool`) |
 | `subagents` | `list[dict]` | Subagent definitions as dicts (see §5) |
 | `backend` | `Backend` | Persistence backend (`FilesystemBackend`, `StateBackend`, `StoreBackend`, `CompositeBackend`) |
-| `memory` | `list[str]` | List of file paths for persistent context, e.g. `["./AGENTS.md"]` (see §8) |
-| `skills` | `list[str]` | Directory paths containing SKILL.md files for on-demand loading |
-| `middleware` | `list[Callable]` | Middleware functions that run on each step |
+| `memory` | `list[str]` | AGENTS.md context files injected always-on at session start, e.g. `["./AGENTS.md"]` — NOT persistent memory (see §8) |
+| `skills` | `list[str]` | Directory paths containing SKILL.md files — native, with 3-layer progressive disclosure (index line → metadata → body on demand) |
+| `middleware` | `list[Callable]` | Middleware that runs on each step — also how tool search is composed (see §12); `SummarizationMiddleware` is on by default |
 | `interrupt_on` | `dict` | HITL configuration for tool approval (see §7) |
 | `checkpointer` | `Checkpointer` | Persistence backend for conversation state |
 | `store` | `BaseStore` | Key-value store for persistent memory |
@@ -248,6 +248,10 @@ agent = create_deep_agent(
 | `description` | `str` | No | Description for parent's routing decisions |
 | `backend` | `Backend` | No | Subagent-specific backend |
 
+**Subagent semantics (verified, deepagents 0.6):**
+- Subagents are **stateless in messages** (each delegation starts a fresh message context) but **share the filesystem/backend with the parent** — there is no file quarantine between parent and subagents.
+- Top-level `interrupt_on` is **inherited only by declarative subagent dicts** like the ones above. `CompiledSubAgent` and remote subagents do NOT inherit it — configure their interrupts explicitly.
+
 ### CompiledSubAgent
 
 When you need programmatic access to compiled subagents:
@@ -357,9 +361,9 @@ for event in agent.stream({"messages": [...]}, config, stream_mode="values"):
 
 ---
 
-## 8. AGENTS.md Memory Pattern
+## 8. AGENTS.md Always-On Context (`memory=`)
 
-`create_deep_agent` supports an `AGENTS.md` file for declarative memory — agent capabilities, context, and history described in markdown.
+`memory=` loads `AGENTS.md` files as **always-on context injected into the system prompt at session start**. It is NOT persistent memory — the agent does not automatically write back to these files, and nothing persists across sessions through this parameter. For cross-session persistence use a `StoreBackend` route in a `CompositeBackend`.
 
 ```markdown
 # AGENTS.md
@@ -382,14 +386,15 @@ agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-5-20250929",
     system_prompt="You coordinate research projects.",
     subagents=[...],
-    memory=["./AGENTS.md"],  # Agent reads/updates this file
+    memory=["./AGENTS.md"],  # injected always-on at session start
 )
 ```
 
 The agent uses AGENTS.md for:
-- **Auto-summarization**: Summarizes completed work into memory
+- **Always-on context**: Conventions, preferences, and project facts available every turn
 - **Capability awareness**: Knows what each subagent can do
-- **Context persistence**: Maintains knowledge across sessions
+
+For persistent memory across conversations, do NOT rely on `memory=` — route a path (e.g. `/memories/`) to a `StoreBackend` via `CompositeBackend` (see §6).
 
 ---
 
@@ -499,6 +504,41 @@ agent = create_deep_agent(
     interrupt_on={"dangerous_tool": {"allowed_decisions": ["approve", "reject"]}},  # keyed by tool name
 )
 ```
+
+---
+
+## 12. Tool Search for Large Catalogs (10+ tools)
+
+There is **no native tool search in deepagents 0.6**. When the catalog reaches 10+ tools or >10k tokens of definitions (Anthropic's documented thresholds for its Tool Search Tool), compose tool search / deferred loading via `middleware=`:
+
+```python
+from deepagents import create_deep_agent
+from langchain.agents.middleware import LLMToolSelectorMiddleware
+# or: from langchain.agents.middleware import ProviderToolSearchMiddleware
+
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-5-20250929",
+    system_prompt="...",
+    tools=large_catalog,  # stays in the single agent — never split by catalog size
+    middleware=[
+        # Option A: server-side tool search / deferred loading (Anthropic, OpenAI)
+        # ProviderToolSearchMiddleware(),
+        # Option B: provider-agnostic fallback — pre-selects tools with an LLM call
+        LLMToolSelectorMiddleware(max_tools=8),
+    ],
+)
+```
+
+| Middleware | How it works | Caveats |
+|------------|--------------|---------|
+| `ProviderToolSearchMiddleware` | Provider-side (Anthropic/OpenAI) tool search with deferred loading of definitions | Requires a supporting provider |
+| `LLMToolSelectorMiddleware` | Provider-agnostic: an LLM call pre-selects the relevant subset per turn | Can select tools outside the list (langchain #33651); its internal call leaks into streams (langchain #34139) |
+
+Notes:
+- Keep the **built-ins (filesystem, task, todos) non-deferred** — the agent must always see them.
+- `skills=` complements tool search: bounded contexts as SKILL.md with native 3-layer progressive disclosure.
+- The skills library is a prompt-injection surface — protect it with `permissions` deny-write (absolute-glob deny-write in interrupt mode requires deepagents >= 0.6.8).
+- `SummarizationMiddleware` is on by default in `create_deep_agent` — long horizons are handled by context compression, not by splitting the agent.
 
 ---
 
