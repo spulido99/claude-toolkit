@@ -28,23 +28,23 @@ Ask the user to describe the **episodes** — units of work between human input 
 **Question 1 — Are the episode's writes coupled?**
 Do the writes (transactions, file edits, state changes, messages sent) depend on decisions made in the same thread?
 
-- **Yes (coupled writes)** → **Assistant pattern**: a single frontal agent owns the conversation and every write. Long horizon is handled with summarization/context compression, not by splitting the agent. Skip to Question 3 for the catalog; deep workers may still be composed for read-heavy sub-episodes.
-- **No — the delegable work is read-only and parallelizable** → continue to Question 2.
+- **Yes (coupled writes)** → **Assistant pattern**: a single frontal agent owns the conversation and every write. Long horizon is handled with summarization/context compression, not by splitting the agent. Skip to Question 2; deep workers may still be composed for read-heavy sub-episodes.
+- **No — the delegable work is read-only and parallelizable** → apply the economic test before leaving this bifurcation:
 
-**Question 2 — Does the episode value pay the ~15x overhead?**
-Multi-agent systems cost ~15x the tokens of a single agent (Anthropic). Is each episode valuable enough (broad research, large-scale analysis) to pay that?
+  **Question 1b — Does the episode value pay the ~15x overhead?**
+  Multi-agent systems cost ~15x the tokens of a single agent (Anthropic). Is each episode valuable enough (broad research, large-scale analysis) to pay that?
 
-- **Yes** → read-only fan-out (orchestrator–workers): parallel read-only subagents, writes concentrated in the lead agent.
-- **No** → stay with the assistant pattern.
+  - **Yes** → read-only fan-out (orchestrator–workers): parallel read-only subagents, writes concentrated in the lead agent.
+  - **No** → stay with the assistant pattern.
 
-**Question 3 — How large is the tool catalog?**
-Estimate tools and definition size. If the catalog has overlap or ambiguous names → **tool design first** (consolidate/rename). If it reaches **10+ tools or >10k tokens of definitions** → **tool search / deferred loading** in the single agent (in deepagents 0.6, compose via `middleware=` with `ProviderToolSearchMiddleware` or `LLMToolSelectorMiddleware`; keep built-ins non-deferred). Never split into subagents because of catalog size.
-
-**Question 4 — What is the interaction regime?**
-Conversational (constant HITL, short turns) or autonomous (long episodes without HITL)? This is **descriptive** — it configures the recipe, never the topology:
+**Question 2 — What is the interaction regime?**
+Conversational (constant HITL, short turns) or autonomous (long episodes without HITL)? This is **descriptive** — it configures the recipe, never the topology (that was decided by Question 1):
 
 - Conversational → `interrupt_on` for sensitive tools, background deep workers for read-heavy episodes.
 - Autonomous → heavier summarization/context compression; still single-agent if writes are coupled (Devin-style).
+
+**Question 3 — How large is the tool catalog?**
+Estimate tools and definition size. If the catalog has overlap or ambiguous names → **tool design first** (consolidate/rename). If it reaches **10+ tools or >10k tokens of definitions** → **tool search / deferred loading** in the single agent (in deepagents 0.6, compose via `middleware=` with `ProviderToolSearchMiddleware` or `LLMToolSelectorMiddleware`; keep built-ins non-deferred). Never split into subagents because of catalog size.
 
 ### Step 3: Capability Mapping
 
