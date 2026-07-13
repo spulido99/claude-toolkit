@@ -50,7 +50,7 @@ agent = create_deep_agent(
 | `tools` | `list` | List of tools (functions decorated with `@tool`) |
 | `subagents` | `list[dict]` | Subagent definitions as dicts (see §5) |
 | `backend` | `Backend` | Persistence backend (`FilesystemBackend`, `StateBackend`, `StoreBackend`, `CompositeBackend`) |
-| `memory` | `list[str]` | AGENTS.md context files injected always-on at session start, e.g. `["./AGENTS.md"]` — NOT persistent memory (see §8) |
+| `memory` | `list[str]` | Memory files injected always-on at session start, e.g. `["./AGENTS.md"]` — persistence depends on the backend serving them (see §8) |
 | `skills` | `list[str]` | Directory paths containing SKILL.md files — native, with 3-layer progressive disclosure (index line → metadata → body on demand) |
 | `middleware` | `list[Callable]` | Middleware that runs on each step — also how tool search is composed (see §12); `SummarizationMiddleware` is on by default |
 | `interrupt_on` | `dict` | HITL configuration for tool approval (see §7) |
@@ -361,9 +361,9 @@ for event in agent.stream({"messages": [...]}, config, stream_mode="values"):
 
 ---
 
-## 8. AGENTS.md Always-On Context (`memory=`)
+## 8. Memory Files (`memory=`)
 
-`memory=` loads `AGENTS.md` files as **always-on context injected into the system prompt at session start**. It is NOT persistent memory — the agent does not automatically write back to these files, and nothing persists across sessions through this parameter. For cross-session persistence use a `StoreBackend` route in a `CompositeBackend`.
+`memory=` points the agent at **memory files** (any paths — `AGENTS.md` is the convention) that are **always loaded into the system prompt at session start**. The agent can update them with `edit_file`, and updates persist for future conversations. Whether that persistence is thread-scoped or durable is a property of the **backend** serving those paths, not of the parameter: `StateBackend` → ephemeral per thread; `FilesystemBackend` → persists on disk; a `StoreBackend` route in a `CompositeBackend` → durable store/DB, cross-thread (the agent still sees plain files).
 
 ```markdown
 # AGENTS.md
@@ -394,7 +394,7 @@ The agent uses AGENTS.md for:
 - **Always-on context**: Conventions, preferences, and project facts available every turn
 - **Capability awareness**: Knows what each subagent can do
 
-For persistent memory across conversations, do NOT rely on `memory=` — route a path (e.g. `/memories/`) to a `StoreBackend` via `CompositeBackend` (see §6).
+For memory that survives across conversations and users, serve the memory paths (e.g. `/memories/`) from a durable backend — a `StoreBackend` route via `CompositeBackend` (see §6) or a `FilesystemBackend`. With the default `StateBackend`, memory files are thread-scoped only.
 
 ---
 

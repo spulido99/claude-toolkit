@@ -119,7 +119,7 @@ interrupt_on = {
 5. **Check security patterns**
 6. **Validate best practices**
 
-Factual notes for review (deepagents 0.6): `memory=` loads AGENTS.md as always-on context (not persistent memory); subagents are stateless in messages but share the filesystem/backend with the parent; top-level `interrupt_on` is inherited only by declarative subagent dicts (not `CompiledSubAgent`/remote).
+Factual notes for review (deepagents 0.6): `memory=` points at memory files injected always-on at session start — agent-updatable via `edit_file`, persistent across sessions when their backend is durable (`FilesystemBackend` or a `StoreBackend` route; thread-scoped under the default `StateBackend`); subagents are stateless in messages but share the filesystem/backend with the parent; top-level `interrupt_on` is inherited only by declarative subagent dicts (not `CompiledSubAgent`/remote).
 
 ## Output Format
 

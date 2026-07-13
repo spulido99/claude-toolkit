@@ -60,7 +60,7 @@ Ask one question at a time:
 1. **Model**: Which model? (default: `anthropic:claude-sonnet-4-5-20250929`)
 2. **File access**: Does the agent need file access? If yes → include `FilesystemBackend`
 3. **Safety**: Are any capabilities sensitive or destructive? If yes → configure `interrupt_on`
-4. **Context files**: Should the agent load always-on context via AGENTS.md (`memory=`)? (default: no; note it is not persistent memory — cross-session persistence needs `CompositeBackend` + `StoreBackend`)
+4. **Memory files**: Should the agent load memory files via `memory=` (`AGENTS.md` by convention)? (default: no; if yes, decide the backend for those paths — thread-scoped `StateBackend`, or `FilesystemBackend` / a `StoreBackend` route via `CompositeBackend` for cross-session memory)
 
 ### Step 6: Design Agent
 

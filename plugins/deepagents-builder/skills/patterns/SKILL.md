@@ -31,7 +31,7 @@ Both provide instructions/context to the agent, but serve different purposes:
 | Static workflows | Always-on context injected at session start |
 | Decision criteria | Capability awareness for delegation |
 
-> `memory=` loads AGENTS.md as **always-on context files** — it is NOT persistent memory. For cross-session persistence use `CompositeBackend` + `StoreBackend` (see the [API Cheatsheet](references/api-cheatsheet.md) §6, §8).
+> `memory=` points at **memory files** (`AGENTS.md` by convention) injected always-on at session start; the agent can update them with `edit_file`. Persistence depends on the backend serving those paths — route them to a `StoreBackend` via `CompositeBackend` (or a `FilesystemBackend`) for cross-session memory (see the [API Cheatsheet](references/api-cheatsheet.md) §6, §8).
 
 ### `system_prompt=` vs runtime context
 

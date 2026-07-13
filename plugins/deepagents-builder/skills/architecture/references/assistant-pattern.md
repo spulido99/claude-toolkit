@@ -60,7 +60,7 @@ agent = create_deep_agent(
         }
     ],
     backend=FilesystemBackend(root_dir="./workspace"),
-    memory=["./AGENTS.md"],  # always-on context files — NOT persistent memory
+    memory=["./AGENTS.md"],  # memory files, always-on; durable if their backend is
     checkpointer=MemorySaver(),  # required for interrupts
     interrupt_on={
         # Inherited ONLY by declarative subagent dicts —
@@ -79,7 +79,7 @@ agent = create_deep_agent(
   - Keep the built-ins (filesystem, task, todos) **non-deferred** — the agent must always see them.
 - **`skills=` is native** with 3-layer progressive disclosure: the skill index costs one line of context, metadata loads on match, and the SKILL.md body is read only on demand. This is the canonical way to separate domain responsibilities in a single agent.
 - **The skills library is a prompt-injection surface.** Protect it with `permissions` deny-write over the skills directory (absolute-glob deny-write in interrupt mode requires deepagents >= 0.6.8).
-- **`memory=` loads AGENTS.md files as always-on context** injected at session start. It is NOT persistent memory — for cross-session persistence use `CompositeBackend` with a `StoreBackend` route.
+- **`memory=` points at memory files** (`AGENTS.md` by convention, any paths in practice) **injected always-on at session start**; the agent can update them with `edit_file`. Persistence is a property of the backend serving those paths: `StateBackend` → thread-scoped, `FilesystemBackend` → on disk, a `StoreBackend` route in a `CompositeBackend` → durable DB/store across conversations — the agent sees plain files either way.
 - **`SummarizationMiddleware` is on by default** in `create_deep_agent`. Long horizon = summarization/context compression, never agent splitting.
 - **Subagents are stateless in messages but SHARE the filesystem/backend with the parent.** Delegation isolates the message context, not the files — do not rely on a file quarantine that does not exist.
 - **Top-level `interrupt_on` is inherited only by declarative subagent dicts**, not by `CompiledSubAgent` instances or remote subagents. If a worker is compiled or remote, configure its interrupts explicitly.

@@ -152,7 +152,7 @@ Agent generates text-only reports.
 
 ### Context Management with AGENTS.md
 
-`AGENTS.md` files are **injected into the system prompt** at session start via the `memory` parameter — always-on context files. Note: this is NOT persistent memory; for cross-session persistence use `CompositeBackend` with a `StoreBackend` route (below).
+The `memory` parameter points the agent at **memory files** — `AGENTS.md` by convention, any paths in practice — **injected into the system prompt** at session start. The agent can update them with `edit_file`; whether the updates persist per-thread only or across conversations depends on the **backend** serving those paths (a `FilesystemBackend` or a `StoreBackend` route makes them durable — see Long-Term Memory below).
 
 ```python
 from deepagents import create_deep_agent
@@ -219,7 +219,7 @@ agent = create_deep_agent(
 
 ### Long-Term Memory with CompositeBackend
 
-For persistent memory across conversations, use `CompositeBackend` to route specific paths to durable storage:
+For persistent memory across conversations, use `CompositeBackend` to route specific paths to durable storage. Memory files listed in `memory=` can themselves live under a durable route (e.g. `memory=["/memories/AGENTS.md"]`) — the agent sees plain files while the store persists them in a DB:
 
 ```python
 from deepagents import create_deep_agent

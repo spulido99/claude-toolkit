@@ -91,7 +91,7 @@ agent = create_deep_agent(
 
 ### Agent with Backend and Memory
 
-Use `FilesystemBackend` for file-first agents and `AGENTS.md` (`memory=`) for always-on context injected at session start (not persistent memory):
+Use `FilesystemBackend` for file-first agents and `memory=` for memory files (`AGENTS.md` by convention) injected always-on at session start — persistent across sessions when their backend is durable (filesystem or a `StoreBackend` route):
 
 ```python
 from deepagents import create_deep_agent

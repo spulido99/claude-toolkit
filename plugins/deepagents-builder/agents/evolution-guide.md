@@ -67,7 +67,7 @@ Read the agent code and extract:
 - **Checkpointer**: Present? Type?
 - **interrupt_on**: Configured? Which tools? (Note: top-level config is inherited only by declarative subagent dicts, not `CompiledSubAgent`/remote)
 - **Backend**: FilesystemBackend, StateBackend, etc. (subagents share it with the parent)
-- **Memory**: `memory=` AGENTS.md always-on context files (not persistent memory)
+- **Memory**: `memory=` memory files (always-on at session start); persistence follows the backend serving them (durable via `FilesystemBackend`/`StoreBackend` route)
 - **Evals**: Does `evals/` directory exist with datasets?
 
 ### Step 3: Score Maturity (80 points)
