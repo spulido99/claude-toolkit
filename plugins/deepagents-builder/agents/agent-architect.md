@@ -167,7 +167,7 @@ Produce a complete subagent dict following these rules:
   - **Role**: one-sentence identity
   - **Context & Vocabulary**: domain terms this subagent owns
   - **Workflow**: step-by-step instructions
-  - **When to Escalate**: explicit conditions for returning to orchestrator
+  - **When to Escalate**: explicit conditions for returning to the lead agent
 - **Tools**: only tools required for this capability, cross-check for shared tool assignments
 - **Model**: only override if justified (cheaper model for simple tasks, more capable for complex reasoning)
 
