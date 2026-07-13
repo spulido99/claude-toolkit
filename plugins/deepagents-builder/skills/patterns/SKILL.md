@@ -24,12 +24,14 @@ Every agent prompt should include:
 
 Both provide instructions/context to the agent, but serve different purposes:
 
-| Use `system_prompt=` parameter for | Use `AGENTS.md` memory for |
+| Use `system_prompt=` parameter for | Use `AGENTS.md` (`memory=`) for |
 |-------------------------------------|---------------------------|
 | Core role definition | Subagent capabilities & descriptions |
-| Hardcoded behavior | Auto-summarized context from past work |
-| Static workflows | Cross-session knowledge persistence |
+| Hardcoded behavior | Project conventions and preferences |
+| Static workflows | Always-on context injected at session start |
 | Decision criteria | Capability awareness for delegation |
+
+> `memory=` loads AGENTS.md as **always-on context files** — it is NOT persistent memory. For cross-session persistence use `CompositeBackend` + `StoreBackend` (see the [API Cheatsheet](references/api-cheatsheet.md) §6, §8).
 
 ### `system_prompt=` vs runtime context
 
@@ -139,6 +141,8 @@ Deep expertise, specific vocabulary.
 ### Coordinator/Orchestrator
 
 Delegates, doesn't execute. Uses subagent dicts — the native pattern for `create_deep_agent`:
+
+> **Topology guard**: this prompt shape belongs to the **read-only fan-out branch** — use it only when the delegated work is read-only and parallelizable and the episode value pays the ~15x multi-agent token overhead. For a conversational assistant whose writes are coupled (the common case), use the **assistant pattern** instead: one frontal agent with flat tools and skills — see [architecture/references/assistant-pattern.md](../architecture/references/assistant-pattern.md).
 
 ```python
 from deepagents import create_deep_agent
@@ -462,7 +466,7 @@ For complete mitigation strategies (4 strategies), content validation, rate limi
 
 ## Anti-Patterns to Avoid
 
-The most common mistakes: God Agent (> 30 tools in one agent), Unclear Boundaries (overlapping subagent responsibilities), Parallel Decision-Making (conflicting choices), Vocabulary Collision (same term means different things), and Premature Decomposition (over-splitting simple tasks).
+The most common mistakes: God Agent (10+ tools without tool search/skills, plus name/description overlap — cured by tool design, then tool search, never by subagent-splitting-by-count), Unclear Boundaries (overlapping subagent responsibilities), Parallel Decision-Making (conflicting choices), Vocabulary Collision (same term means different things), and Premature Decomposition (over-splitting simple tasks).
 
 For the complete catalog of 19 anti-patterns with code examples and fixes, see **[`references/anti-patterns.md`](references/anti-patterns.md)**.
 

@@ -35,10 +35,16 @@ Extract from the code:
 Check for each anti-pattern:
 
 #### God Agent
-- **Check**: Count tools in main agent
-- **Flag if**: > 30 tools without subagents
+- **Check**: Tool catalog size vs disclosure mechanism, and tool name/description overlap
+- **Flag if**: 10+ tools without tool search/skills (no disclosure mechanism)
 - **Severity**: High
-- **Fix**: Group into platform subagents
+- **Fix**: Cure ladder — (1) tool design (consolidate/rename overlapping tools), (2) tool search / deferred loading (`middleware=` with `ProviderToolSearchMiddleware` or `LLMToolSelectorMiddleware`), (3) subagents only if read-only parallelizable work remains that pays the ~15x token overhead
+
+#### Fragmented Writes
+- **Check**: Write-capable tools distributed across subagents
+- **Flag if**: Coupled writes (same-thread decisions) split across agents
+- **Severity**: High
+- **Fix**: Concentrate writes in a single frontal agent (assistant pattern)
 
 #### Unclear Boundaries
 - **Check**: Subagent descriptions

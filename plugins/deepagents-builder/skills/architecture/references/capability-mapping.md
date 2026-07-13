@@ -1,10 +1,10 @@
 # Business Capability Mapping for Agents
 
-Step-by-step guide to map business capabilities to subagent architecture.
+Step-by-step guide to map business capabilities to an agent architecture.
 
 ## Overview
 
-Business capabilities represent **what** an organization can do. Subagents should mirror these capabilities to create natural, maintainable agent architectures.
+Business capabilities represent **what** an organization can do. Bounded contexts derived from them map onto the topology branch chosen by write coupling (see [topology-patterns.md](topology-patterns.md)): in the **assistant branch** (coupled writes — the default) each bounded context becomes a **skill** with progressive disclosure; in the **read-only fan-out branch** they may become read-only worker subagents.
 
 ## Step 1: Identify Business Capabilities
 
@@ -88,63 +88,48 @@ Capability: Customer Management
 └── Bounded Context: Sales (leads, opportunities)
 ```
 
-## Step 3: Map to Subagent Topology
+## Step 3: Map Bounded Contexts to the Topology
 
 ### Mapping Rules
 
-| Business Pattern | Agent Pattern | Rationale |
-|------------------|---------------|-----------|
-| Single capability | No subagent | Main agent sufficient |
-| 2-3 related capabilities | Platform subagent | Group for reuse |
-| Distinct bounded contexts | Specialized subagents | Isolation needed |
-| Hierarchical capabilities | Nested subagents | Mirror structure |
+The branch comes from write coupling (ADR / [topology-patterns.md](topology-patterns.md)), then bounded contexts map onto it:
 
-### Example: E-commerce Agent
+| Business Pattern | Assistant branch (coupled writes — default) | Read-only fan-out branch |
+|------------------|---------------------------------------------|--------------------------|
+| Single capability | Flat tools on the frontal agent | — |
+| Distinct bounded contexts | One **skill** per context (SKILL.md) | One read-only worker per independent area |
+| Growing catalog (10+ tools) | Tool search / deferred loading | Tool search inside each worker |
+| Read-heavy sub-episodes | Background deep workers (composition) | Parallel workers; writes stay in the lead |
+
+### Example: E-commerce Assistant (coupled writes → skills, not subagents)
+
+A conversational support agent's writes (refunds, order changes, tickets) depend on decisions in the same conversation — so one frontal agent holds every tool, and the bounded contexts become skills:
 
 ```python
-# Capability: Customer Support
-# Bounded Context: Support Operations
-
+# Capability: Customer Support — assistant pattern
 agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-5-20250929",
-    system_prompt="You coordinate customer support operations...",
-    
-    subagents=[
-        # Capability: Customer Inquiry
-        {
-            "name": "inquiry-handler",
-            "description": "Answers customer questions about products, orders, and policies",
-            "system_prompt": """You handle customer inquiries. In your context:
-            - 'Customer' = person making purchase
-            - 'Inquiry' = question needing answer
-            - 'Knowledge Base' = FAQ and help docs""",
-            "tools": [kb_search, order_lookup, policy_docs]
-        },
-        
-        # Capability: Issue Resolution  
-        {
-            "name": "issue-resolver",
-            "description": "Diagnoses and resolves customer problems and complaints",
-            "system_prompt": """You resolve customer issues. In your context:
-            - 'Issue' = problem preventing satisfaction
-            - 'Resolution' = fix or compensation
-            - 'Escalation' = route to specialist""",
-            "tools": [diagnostic_tools, refund_process, ticket_system]
-        },
-        
-        # Capability: Order Management (different bounded context!)
-        {
-            "name": "order-specialist",
-            "description": "Manages order modifications, cancellations, and tracking",
-            "system_prompt": """You manage orders. In your context:
-            - 'Order' = purchase transaction
-            - 'Status' = current fulfillment stage
-            - 'Modification' = change before shipping""",
-            "tools": [order_api, tracking_api, warehouse_system]
-        }
-    ]
+    system_prompt="You handle customer support end-to-end: inquiries, issues, and orders.",
+    tools=[
+        kb_search, order_lookup, policy_docs,        # inquiries (read)
+        diagnostic_tools, refund_process, ticket_system,  # issues (writes stay here)
+        order_api, tracking_api, warehouse_system,   # orders (writes stay here)
+    ],
+    middleware=[LLMToolSelectorMiddleware()],  # 10+ tools -> tool search
+    skills=["./skills/"],
+    interrupt_on={"refund_process": {"allowed_decisions": ["approve", "reject"]}},
+    checkpointer=MemorySaver(),
 )
 ```
+
+```
+skills/
+├── inquiries/SKILL.md   # 'Inquiry' = question needing answer; KB usage policy
+├── issues/SKILL.md      # 'Issue' = problem; 'Resolution' = fix or compensation; escalation policy
+└── orders/SKILL.md      # 'Order' = purchase transaction; 'Modification' = change before shipping
+```
+
+Read-only, parallelizable capabilities (e.g. market research across many sources) may instead become worker subagents on the fan-out branch — if the episode value pays the ~15x token overhead.
 
 ## Step 4: Validate Mapping
 
@@ -155,16 +140,16 @@ agent = create_deep_agent(
 - Are there gaps in coverage?
 
 ✅ **Boundary Clarity**
-- Can you explain when to use each subagent?
-- Is there overlap between subagents?
+- Can you explain when each skill applies (or when to dispatch each worker)?
+- Is there overlap between contexts?
 
 ✅ **Vocabulary Consistency**
-- Does each subagent have consistent terminology?
+- Does each bounded context have consistent terminology?
 - Are there conflicting definitions?
 
-✅ **Cognitive Load**
-- Does each subagent have 3-10 tools?
-- Is the main agent overloaded?
+✅ **Topology Fit & Disclosure**
+- Do all coupled writes live in one frontal agent?
+- If the catalog is 10+ tools, is tool search / skills disclosure in place?
 
 ✅ **Business Alignment**
 - Do subagents mirror business organization?

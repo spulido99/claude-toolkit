@@ -2,30 +2,61 @@
 
 Patterns for evolving deep agent architectures as requirements change.
 
+**Ordering rule (the cure ladder):** exhaust the cheap rungs inside the single agent first — (1) tool design (consolidate/rename), (2) disclosure (tool search + skills, Pattern 0) — and extract subagents (Patterns 1, 5, 7) only for **read-only, parallelizable** work whose episode value pays the ~15x multi-agent token overhead. Never split an agent because the catalog grew or the horizon is long (long horizon → summarization).
+
 ## When to Refactor
 
 **Triggers:**
-- Cognitive load > 30 tools per agent
+- 10+ tools (or >10k tokens of definitions) without tool search/skills
+- Overlapping tool names/descriptions (frequent tool selection errors)
+- Coupled writes fragmented across subagents
 - Subagent utilization < 20% (rarely used)
-- Context overflow despite subagents
+- Context overflow (fix with summarization/disclosure, not splitting)
 - New business capabilities emerging
-- Frequent tool selection errors
 - Slow task execution
 
-## Pattern 1: Extract Platform
+## Pattern 0: Adopt Disclosure (Tool Search + Skills) — first rung
 
-**Problem:** Main agent overloaded with tool management
+**Problem:** Large catalog with every definition loaded up front; tool selection degrading
+
+**Before:**
+```python
+agent = create_deep_agent(
+    tools=[t1, t2, ..., t25]  # all definitions in context every turn
+)
+```
+
+**After:**
+```python
+agent = create_deep_agent(
+    tools=[t1, t2, ..., t25],  # same single agent — writes stay in one thread
+    middleware=[
+        # No native tool search in deepagents 0.6 — compose it:
+        # ProviderToolSearchMiddleware(),  # Anthropic/OpenAI server-side
+        LLMToolSelectorMiddleware(),       # provider-agnostic fallback
+    ],
+    skills=["./skills/"],  # bounded contexts as skills, progressive disclosure
+)
+```
+
+**Steps:**
+1. Tool design first: consolidate/rename overlapping tools
+2. Add tool search via `middleware=`; keep built-ins (filesystem, task, todos) non-deferred
+3. Package bounded contexts as skills (SKILL.md per domain); protect the skills library with `permissions` deny-write
+4. Measure tool-selection accuracy and tokens per episode
+
+## Pattern 1: Extract Read-Only Platform
+
+**Problem:** Heavy **read-only, parallelizable** work (research, data gathering) running inline in the frontal agent — after Pattern 0 has been applied and the episode value pays the ~15x overhead
 
 **Before:**
 ```python
 agent = create_deep_agent(
     tools=[
-        # 15 data tools
-        db_query, file_read, api_call, ...
-        # 12 analysis tools
-        calculate, visualize, report, ...
-        # 18 communication tools
-        email, slack, sms, ...
+        # action/write tools (stay in the frontal agent)
+        send_email, update_record, ...
+        # heavy read-only research tools
+        web_search, read_docs, market_data, ...
     ]
 )
 ```
@@ -33,20 +64,19 @@ agent = create_deep_agent(
 **After:**
 ```python
 agent = create_deep_agent(
-    tools=[coordination_tools],
+    tools=[send_email, update_record],  # writes stay in the frontal agent
     subagents=[
-        {"name": "data-platform", "tools": [db, file, api]},
-        {"name": "analysis-platform", "tools": [calc, viz, report]},
-        {"name": "comms-platform", "tools": [email, slack, sms]}
+        {"name": "research-worker", "tools": [web_search, read_docs]},   # read-only
+        {"name": "market-worker", "tools": [market_data]},               # read-only
     ]
 )
 ```
 
 **Steps:**
-1. Group tools by capability (data, analysis, communication)
-2. Create platform subagent for each group
-3. Test tool delegation
-4. Measure cognitive load reduction
+1. Verify the delegable work is read-only and parallelizable (writes never leave the frontal agent)
+2. Verify the episode value pays ~15x tokens
+3. Create read-only workers returning concise summaries
+4. Remember: workers share the filesystem/backend with the parent (no file quarantine)
 
 ## Pattern 2: Split Bounded Context
 
@@ -223,41 +253,36 @@ agent = create_deep_agent(
 3. Use temporarily until capability established
 4. Remove once no longer needed
 
-## Pattern 7: Hierarchical Decomposition
+## Pattern 7: Disclose Inside the Worker
 
-**Problem:** Domain too complex for single level
+**Problem:** A worker subagent's own catalog has grown large (10+ tools without disclosure)
 
 **Before:**
 ```python
 agent = create_deep_agent(
     subagents=[
-        {"name": "operations", "tools": [50+ tools]}  # Too many
+        {"name": "research-worker", "tools": [many_read_only_tools]}  # no disclosure
     ]
 )
 ```
 
 **After:**
 ```python
-operations_agent = {
-    "name": "operations",
-    "tools": [coordination_tools],
-    "subagents": [
-        {"name": "inventory", "tools": [...]},
-        {"name": "fulfillment", "tools": [...]},
-        {"name": "shipping", "tools": [...]}
-    ]
-}
-
 agent = create_deep_agent(
-    subagents=[operations_agent, sales_agent, finance_agent]
+    subagents=[
+        {
+            "name": "research-worker",
+            "tools": many_read_only_tools,
+            "middleware": [LLMToolSelectorMiddleware()],  # disclosure inside the worker
+        }
+    ]
 )
 ```
 
 **Steps:**
-1. Identify overloaded subagent
-2. Map sub-capabilities
-3. Create nested structure
-4. Define delegation rules
+1. Apply the same cure ladder inside the worker: tool design → tool search
+2. Do NOT nest more subagents to cope with catalog size — each nesting level multiplies token cost and latency
+3. Nest workers only if genuinely independent read-only fan-out remains AND the episode value pays another ~15x hop
 
 ## Pattern 8: Sequential to Parallel
 
@@ -395,7 +420,7 @@ Track these before and after refactoring:
 - **Token efficiency**: Tokens per successful task
 - **Time to completion**: Seconds per task
 - **Success rate**: Successful tasks / total
-- **Cognitive load**: Tools per agent
+- **Disclosure health**: catalog size vs tool search/skills mechanism in place
 - **Utilization**: Subagent usage frequency
 - **Error rate**: Failed tasks / total
 

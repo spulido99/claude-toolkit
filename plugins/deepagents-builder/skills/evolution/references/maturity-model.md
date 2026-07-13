@@ -2,20 +2,23 @@
 
 Assess and evolve your deep agent architecture through maturity levels.
 
+Maturity measures **engineering discipline — context, tools, and evals — orthogonal to topology**. More subagents is NOT more maturity: a single agent with skills and evals can be Level 3-4, while a multi-agent system without evals or telemetry is Level 1. Topology is decided by write coupling (see [architecture/references/assistant-pattern.md](../../architecture/references/assistant-pattern.md)); maturity scores how well the chosen topology fits and how disciplined the engineering around it is.
+
 ## Level 1: Initial (Ad-Hoc)
 
 **Characteristics:**
-- Single agent handles everything
-- 40-60+ tools in one agent
+- Large tool catalog with no disclosure mechanism (no tool search, no skills)
+- Overlapping tool names and descriptions
 - No planning or context management
-- Frequent tool selection errors
-- High token usage per task
+- No evals, no telemetry — regardless of how many subagents exist
+- Frequent tool selection errors, high token usage per task
 
 **Example:**
 ```python
 agent = create_deep_agent(
-    tools=[tool1, tool2, ..., tool60]  # Everything in one agent
+    tools=[get_resource, get_data, fetch_resource, ...]  # overlapping, all loaded up front
 )
+# Equally Level 1: five subagents, zero evals, zero telemetry
 ```
 
 **Symptoms:**
@@ -24,125 +27,94 @@ agent = create_deep_agent(
 - Inconsistent results
 - Long execution times
 
-**Next Step:** Identify tool groupings and create platform subagents
+**Next Step:** Identify bounded contexts and package them as skills; consolidate/rename overlapping tools (tool design)
 
 ---
 
 ## Level 2: Managed (Basic Structure)
 
 **Characteristics:**
-- 2-4 subagents based on intuition
-- Some capability separation
-- Still some overlapping responsibilities
-- Basic planning (to-do lists)
+- Bounded contexts identified and packaged as skills (SKILL.md with progressive disclosure)
+- Tool catalog consolidated (tool design applied: no overlapping names)
+- Basic planning (to-do lists with an instructed threshold)
+- Topology roughly matches write coupling (writes concentrated in one agent)
 
 **Example:**
 ```python
 agent = create_deep_agent(
-    subagents=[
-        {"name": "data-agent", "tools": [...]},
-        {"name": "api-agent", "tools": [...]},
-        {"name": "report-agent", "tools": [...]}
-    ]
+    tools=consolidated_tools,
+    skills=["./skills/"],  # one SKILL.md per bounded context
 )
 ```
 
 **Improvements:**
-- Reduced cognitive load
-- Better tool organization
-- Some context isolation
+- Reduced tool-selection errors
+- Domain vocabulary lives in skills, loaded on demand
+- Writes stay in one thread
 
 **Gaps:**
-- Subagent boundaries unclear
-- Not aligned with business capabilities
-- Limited reusability
+- No disclosure mechanism for a still-growing catalog
+- Contracts implicit
+- No evals yet
 
-**Next Step:** Map business capabilities and define bounded contexts
+**Next Step:** Add tool search for the 10+ catalog, make contracts explicit, document vocabularies
 
 ---
 
-## Level 3: Defined (Capability-Aligned)
+## Level 3: Defined (Disclosed & Contracted)
 
 **Characteristics:**
-- Subagents map to business capabilities
-- Clear bounded contexts with distinct vocabularies
-- Documented interaction patterns
-- Planning integrated
-- File system for context management
+- Tool search / deferred loading operating for large catalogs (10+ tools or >10k tokens of definitions)
+- Explicit contracts between components (tool inputs/outputs, skill scopes, worker summaries)
+- Topology explicitly justified by write coupling; any subagents are read-only, parallelizable, and pass the ~15x economic test
+- Documented vocabularies per bounded context
+- File system / summarization for context management
 
 **Example:**
 ```python
 agent = create_deep_agent(
-    system_prompt="You coordinate customer operations...",
-    subagents=[
-        {
-            "name": "customer-support",
-            "description": "Handles inquiries and issues",
-            "system_prompt": "In support context: 'ticket' = customer issue...",
-            "tools": [support_kb, ticket_system]
-        },
-        {
-            "name": "order-management",
-            "description": "Manages orders and fulfillment",
-            "system_prompt": "In order context: 'order' = purchase transaction...",
-            "tools": [order_api, shipping_api]
-        }
-    ]
+    tools=consolidated_tools,
+    middleware=[LLMToolSelectorMiddleware()],  # or ProviderToolSearchMiddleware
+    skills=["./skills/"],
+    interrupt_on={...},
+    checkpointer=MemorySaver(),
 )
+# Single agent — and can score Level 3-4 with skills + evals
 ```
 
 **Improvements:**
-- Clear responsibilities
+- Clear responsibilities without fragmenting writes
+- Disclosure keeps the context lean
 - Business alignment
-- Vocabulary consistency
-- Context isolation working
 
 **Gaps:**
-- Not all topology types used
 - Limited metrics
-- Manual evolution
+- Eval coverage partial
 
-**Next Step:** Apply Team Topologies and establish metrics
+**Next Step:** Build the eval suites and telemetry
 
 ---
 
 ## Level 4: Measured (Optimized)
 
 **Characteristics:**
-- Full Team Topologies applied
-- Platform, enabling, and specialist subagents
-- Defined interaction modes (X-as-a-Service, Collaboration, Facilitation)
-- Performance metrics tracked
-- Automated testing
-
-**Example:**
-```python
-agent = create_deep_agent(
-    subagents=[
-        # Stream-aligned (main)
-        # Platform subagents
-        {"name": "data-platform", "type": "platform"},
-        {"name": "integration-platform", "type": "platform"},
-        # Complicated subsystem
-        {"name": "ml-specialist", "type": "subsystem"},
-        # Enabling
-        {"name": "research-advisor", "type": "enabling"}
-    ]
-)
-```
+- Eval suites running: tool-selection accuracy, HITL/interrupt flows, disclosure behavior
+- Telemetry tracked: cache hit rate, latency, tokens per episode
+- Metrics drive refactoring decisions
+- Automated regression testing (EDD workflow active)
 
 **Metrics:**
-- Token efficiency: Tokens/task
-- Subagent utilization: Usage frequency
-- Error rate: Failed tasks/total
-- Cognitive load: Tools per agent
-- Reusability: Subagent reuse across tasks
+- Tokens per episode
+- Cache hit rate
+- Latency per turn / per episode
+- Tool selection accuracy
+- Error rate: failed tasks/total
+- For any subagents: utilization and per-episode token multiple (does the value still pay ~15x?)
 
 **Improvements:**
-- Optimal architecture
 - Data-driven decisions
-- High reusability
-- Low cognitive load
+- Regressions caught by evals
+- Cost and latency under control
 
 **Gaps:**
 - Still requires manual design
@@ -157,11 +129,10 @@ agent = create_deep_agent(
 **Characteristics:**
 - Self-organizing agent ecosystem
 - Automatic capability detection
-- Dynamic subagent creation
-- Continuous optimization based on metrics
-- A/B testing different topologies
+- Continuous optimization based on telemetry
+- A/B testing different recipes (disclosure thresholds, summarization settings)
 
-**This is an aspirational target.** No framework currently provides fully automatic agent evolution. Achieve this incrementally by combining Level 4 metrics with configuration-driven architectures and A/B testing (see [Refactoring Patterns](../references/refactoring-patterns.md)).
+**This is an aspirational target.** No framework currently provides fully automatic agent evolution. Achieve this incrementally by combining Level 4 metrics with configuration-driven architectures and A/B testing (see [Refactoring Patterns](refactoring-patterns.md)).
 
 ---
 
@@ -170,20 +141,20 @@ agent = create_deep_agent(
 Score your agent architecture (0-5 for each):
 
 ### Structure
-- [ ] Clear subagent boundaries (0: none, 5: perfect clarity)
+- [ ] Topology fit (0: contradicts write coupling, 5: matches ADR — coupled writes in one agent, subagents read-only and ~15x-justified)
+- [ ] Bounded contexts as skills (0: none, 5: every domain packaged with progressive disclosure)
 - [ ] Business capability alignment (0: random, 5: perfect mapping)
-- [ ] Bounded context definition (0: none, 5: explicit vocabularies)
-- [ ] Topology variety (0: none, 5: all types present)
+- [ ] Explicit contracts (0: implicit, 5: documented inputs/outputs for tools, skills, workers)
 
 ### Operations
-- [ ] Planning integration (0: none, 5: comprehensive)
-- [ ] Context management (0: overflows, 5: optimal)
-- [ ] Tool organization (0: chaotic, 5: systematic)
+- [ ] Planning integration (0: none, 5: instructed thresholds, adaptive)
+- [ ] Context management (0: overflows, 5: summarization/compression tuned for the horizon)
+- [ ] Disclosure (0: full catalog always loaded, 5: tool search + skills disclosure operating)
 - [ ] Error handling (0: crashes, 5: graceful recovery)
 
 ### Measurement
-- [ ] Performance metrics (0: none, 5: comprehensive)
-- [ ] Testing coverage (0: none, 5: automated)
+- [ ] Telemetry (0: none, 5: cache/latency/tokens-per-episode tracked)
+- [ ] Eval coverage (0: none, 5: tool-selection, HITL, and disclosure suites running)
 - [ ] Documentation (0: none, 5: complete)
 - [ ] Monitoring (0: none, 5: real-time)
 
@@ -203,34 +174,32 @@ Score your agent architecture (0-5 for each):
 
 ### Level 1 → Level 2
 
-1. Group tools by theme (data, communication, analysis)
-2. Create 2-3 basic subagents
-3. Test with sample tasks
-4. Measure cognitive load reduction
+1. Apply tool design: consolidate and rename overlapping tools
+2. Identify bounded contexts and **package them as skills** (SKILL.md per context — NOT subagents)
+3. Instruct a planning threshold (`write_todos` for 3+ dependent steps)
+4. Verify writes are concentrated in one agent
 
 ### Level 2 → Level 3
 
-1. Map business capabilities
-2. Define bounded contexts
-3. Redesign subagents around capabilities
-4. Document vocabularies
-5. Establish interaction patterns
+1. Add tool search / deferred loading for the 10+ catalog (`middleware=` in deepagents 0.6)
+2. Make contracts explicit (tool inputs/outputs, skill scopes)
+3. Document vocabularies per bounded context
+4. Justify topology against write coupling; apply the ~15x test to any subagent
+5. Configure the recipe from the regime (interrupts, summarization)
 
 ### Level 3 → Level 4
 
-1. Apply Team Topologies
-2. Identify platform capabilities
-3. Create enabling subagents for knowledge transfer
-4. Implement metrics collection
-5. Establish testing framework
+1. Build eval suites: tool-selection, HITL/interrupts, disclosure behavior
+2. Implement telemetry: cache hit rate, latency, tokens per episode
+3. Establish the EDD loop (baseline before refactoring, regression after)
+4. Track subagent economics (per-episode token multiple)
 
 ### Level 4 → Level 5
 
-1. Implement telemetry
-2. Build optimization engine
-3. Create capability discovery
-4. Enable automatic refactoring
-5. Implement A/B testing
+1. Automate telemetry-driven optimization
+2. Externalize configuration
+3. Enable A/B testing of recipes
+4. Implement feedback loops
 
 ## Red Flags by Level
 
@@ -240,14 +209,14 @@ Score your agent architecture (0-5 for each):
 🚩 Execution takes > 5 minutes for simple tasks
 
 **Level 2:**
-🚩 Subagents rarely used
-🚩 Unclear when to use which subagent
+🚩 Skills exist but the full catalog still loads up front (no disclosure)
+🚩 Subagents created because the catalog grew
 🚩 Still getting context overflow
 
 **Level 3:**
 🚩 Business users don't recognize structure
-🚩 Vocabulary conflicts between subagents
-🚩 Can't add new capabilities easily
+🚩 Vocabulary conflicts between bounded contexts
+🚩 Subagents that write in a thread coupled with the frontal agent
 
 **Level 4:**
 🚩 Metrics not driving decisions
@@ -256,39 +225,40 @@ Score your agent architecture (0-5 for each):
 
 ## Success Indicators
 
-**Level 2:** 30-50% reduction in cognitive load
-**Level 3:** Clear business stakeholder understanding
-**Level 4:** 80%+ test coverage, metrics tracked
+**Level 2:** Overlap eliminated; domain vocabulary loads on demand
+**Level 3:** Lean context per episode; stakeholders recognize the structure
+**Level 4:** Eval suites green in CI; tokens-per-episode trending down
 **Level 5:** Automatic adaptation, improving metrics
 
 ## Tools for Assessment
 
-1. **Cognitive Load Calculator**
+1. **Disclosure Check**
 ```python
-def calculate_cognitive_load(agent):
-    main_tools = len(agent.tools)
-    subagent_tools = [len(s.tools) for s in agent.subagents]
+def check_disclosure(agent):
+    catalog_size = len(agent.tools)
+    has_tool_search = any("ToolSearch" in type(m).__name__ or "ToolSelector" in type(m).__name__
+                          for m in agent.middleware)
+    has_skills = bool(agent.skills)
     return {
-        "main_agent_load": main_tools,
-        "subagent_loads": subagent_tools,
-        "max_load": max([main_tools] + subagent_tools),
-        "avg_load": statistics.mean([main_tools] + subagent_tools)
+        "catalog_size": catalog_size,
+        "needs_disclosure": catalog_size >= 10,
+        "disclosure_present": has_tool_search or has_skills,
     }
 ```
 
-2. **Boundary Clarity Score**
+2. **Topology Fit Check**
 ```python
-def assess_boundary_clarity(subagents):
-    # Check for overlapping tools
-    # Check for clear descriptions
-    # Check for distinct vocabularies
-    return clarity_score  # 0-100
+def check_topology_fit(agent):
+    # For each subagent: does it hold write-capable tools?
+    # Coupled writes in a subagent = topology mismatch (ADR-0001)
+    # Also: is each subagent's episode value worth ~15x tokens?
+    return fit_report
 ```
 
 3. **Business Alignment Check**
 ```python
 def check_business_alignment(agent, business_capabilities):
-    # Compare subagents to business capability map
+    # Compare skills/workers to business capability map
     # Identify gaps and overlaps
     return alignment_report
 ```

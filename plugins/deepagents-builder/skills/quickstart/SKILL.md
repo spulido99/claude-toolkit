@@ -91,7 +91,7 @@ agent = create_deep_agent(
 
 ### Agent with Backend and Memory
 
-Use `FilesystemBackend` for file-first agents and `AGENTS.md` for declarative memory:
+Use `FilesystemBackend` for file-first agents and `AGENTS.md` (`memory=`) for always-on context injected at session start (not persistent memory):
 
 ```python
 from deepagents import create_deep_agent
@@ -177,27 +177,14 @@ agent = create_deep_agent(
 from deepagents import create_deep_agent
 from langgraph.checkpoint.memory import MemorySaver
 
+# Assistant pattern: one frontal agent handles the conversation end-to-end.
+# The writes (tickets, orders) are coupled to decisions in the same thread,
+# so they all stay in this single agent — domain knowledge lives in skills.
 agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-5-20250929",
-    system_prompt="You coordinate customer support. Route inquiries to the appropriate specialist.",
-    tools=[],
-    subagents=[
-        {
-            "name": "inquiry-handler",
-            "tools": [knowledge_base_tool],
-            "system_prompt": "You answer customer questions accurately.",
-        },
-        {
-            "name": "issue-resolver",
-            "tools": [ticketing_tool],
-            "system_prompt": "You resolve customer problems.",
-        },
-        {
-            "name": "order-specialist",
-            "tools": [order_tool],
-            "system_prompt": "You manage customer orders.",
-        },
-    ],
+    system_prompt="You handle customer support end-to-end: answer questions, resolve issues, and manage orders.",
+    tools=[knowledge_base_tool, ticketing_tool, order_tool],
+    skills=["./skills/"],  # bounded contexts (inquiries, issues, orders) as SKILL.md
     checkpointer=MemorySaver(),
     interrupt_on={"order_tool": {"allowed_decisions": ["approve", "reject"]}},  # keyed by tool name
 )

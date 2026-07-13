@@ -569,8 +569,8 @@ Cross-ref: [Evolution — Red Flags](../../evolution/SKILL.md)
 
 | Red Flag | Eval Metric | Threshold | Action |
 |----------|-------------|-----------|--------|
-| Tool confusion | Tool selection accuracy | < 80% | Simplify tool descriptions, reduce tool count |
-| Context overflow | Context overflow rate | > 5% | Split into subagents, reduce tool descriptions |
+| Tool confusion | Tool selection accuracy | < 80% | Tool design (consolidate/rename overlapping tools), then tool search |
+| Context overflow | Context overflow rate | > 5% | Tune summarization/context compression, add tool search / deferred loading |
 | Inconsistent results | Scenario pass rate | < 90% | Add deterministic checks, review prompt |
 | Slow responses | Avg latency | > 60s | Optimize tool chains, cache results |
 | High escalation | Escalation rate | > 15% | Expand agent capabilities, adjust thresholds |

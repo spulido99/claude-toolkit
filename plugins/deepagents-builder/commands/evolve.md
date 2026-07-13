@@ -18,14 +18,15 @@ Guided refactoring to the next maturity level with before/after scoring.
 
 - **agent-path**: Path to the agent file (optional, auto-detected if not provided)
 - **--pattern**: Skip auto-recommendation, use a specific refactoring pattern:
-  - `extract-platform` — Extract overloaded tools into a platform subagent
+  - `adopt-disclosure` — Add tool search + skills to a large catalog (first rung; single agent keeps the tools)
+  - `extract-platform` — Extract read-only, parallelizable work into worker subagents (only if the episode value pays ~15x)
   - `split-context` — Split a subagent covering multiple domains
   - `merge-subagents` — Merge underutilized tiny subagents
-  - `promote-main` — Promote a dominant subagent to main agent
+  - `promote-main` — Promote a dominant subagent to main agent (also cures coupled writes held by a subagent)
   - `extract-specialist` — Extract a complex tool into its own specialist subagent
   - `add-enabling` — Add an enabling agent to fill capability gaps
-  - `hierarchical` — Decompose a subagent with too many tools
-  - `parallel` — Convert sequential independent tasks to parallel execution
+  - `worker-disclosure` — Apply tool design + tool search inside a worker whose catalog grew
+  - `parallel` — Convert sequential independent read-only tasks to parallel execution
   - `config-externalize` — Move hardcoded behavior to external configuration
 
 ## Workflow
