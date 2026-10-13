@@ -46,7 +46,7 @@ If `--from-api` was provided:
 
 1. **Load OpenAPI spec**: Parse the YAML/JSON file
 2. **Extract endpoint**: Find the specified endpoint path and method
-3. **Map to tool**: Apply the 11 principles to convert the endpoint:
+3. **Map to tool**: Apply every principle in `${CLAUDE_PLUGIN_ROOT}/skills/tool-design/SKILL.md` to convert the endpoint, in particular:
    - Semantic name from path + operation (not HTTP method)
    - When-to-use / when-not-to-use boundaries from description
    - Structured parameters from schema

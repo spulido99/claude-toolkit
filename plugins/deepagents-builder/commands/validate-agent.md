@@ -32,93 +32,17 @@ Extract from the code:
 
 ### Step 3: Anti-Pattern Detection
 
-Check for each anti-pattern:
+Check the parsed configuration against every anti-pattern in `${CLAUDE_PLUGIN_ROOT}/skills/patterns/references/anti-patterns.md` and record each match with file, line and the fix from the catalog.
 
-#### God Agent
-- **Check**: Tool catalog size vs disclosure mechanism, and tool name/description overlap
-- **Flag if**: 10+ tools without tool search/skills (no disclosure mechanism)
-- **Severity**: High
-- **Fix**: Cure ladder — (1) tool design (consolidate/rename overlapping tools), (2) tool search / deferred loading (`middleware=` with `ProviderToolSearchMiddleware` or `LLMToolSelectorMiddleware`), (3) subagents only if read-only parallelizable work remains that pays the ~15x token overhead
-
-#### Fragmented Writes
-- **Check**: Write-capable tools distributed across subagents
-- **Flag if**: Coupled writes (same-thread decisions) split across agents
-- **Severity**: High
-- **Fix**: Concentrate writes in a single frontal agent (assistant pattern)
-
-#### Unclear Boundaries
-- **Check**: Subagent descriptions
-- **Flag if**: Ambiguous or overlapping descriptions
-- **Severity**: Medium
-- **Fix**: Make descriptions specific and distinct
-
-#### Parallel Decision-Making
-- **Check**: Subagents that could conflict
-- **Flag if**: Multiple subagents can make incompatible choices
-- **Severity**: High
-- **Fix**: Sequential execution with handoff
-
-#### Vocabulary Collision
-- **Check**: System prompts for conflicting terms
-- **Flag if**: Same term used differently across agents
-- **Severity**: Medium
-- **Fix**: Explicit vocabulary in each bounded context
-
-#### One-Time Subagent
-- **Check**: Subagent with 1-2 tools
-- **Flag if**: Subagent overhead not justified
-- **Severity**: Low
-- **Fix**: Move tools to main agent
-
-#### Premature Decomposition
-- **Check**: Total task complexity vs agent complexity
-- **Flag if**: Complex architecture for simple task
-- **Severity**: Medium
-- **Fix**: Simplify to single agent
+Severity: God Agent, Fragmented Writes and Parallel Decision-Making are High. Unclear Boundaries, Vocabulary Collision and Premature Decomposition are Medium. One-Time Subagent is Low. Rate any other match by impact.
 
 ### Step 4: Security Validation
 
-Check for security issues:
-
-#### User IDs as Parameters
-- **Check**: Tool parameters for `user_id`, `account_id`, etc.
-- **Flag if**: Sensitive IDs exposed to LLM
-- **Severity**: High
-- **Fix**: Use ToolRuntime for context injection
-
-#### Missing Checkpointer
-- **Check**: Checkpointer configuration
-- **Flag if**: Using interrupt_on without checkpointer
-- **Severity**: High
-- **Fix**: Add MemorySaver() checkpointer
-
-#### No HITL for Destructive Tools
-- **Check**: Tools that delete, modify, or send
-- **Flag if**: Destructive tools without interrupt_on
-- **Severity**: Medium
-- **Fix**: Add interrupt_on for sensitive operations
+Apply the security checks in section 2 of `${CLAUDE_PLUGIN_ROOT}/agents/code-reviewer.md` (user IDs as tool parameters, missing checkpointer with `interrupt_on`, destructive tools without approval) and record each match with its severity and location.
 
 ### Step 5: Best Practices Check
 
-#### Tool Naming
-- **Check**: Tool function names
-- **Flag if**: Not snake_case
-- **Severity**: Low
-
-#### Docstrings
-- **Check**: Tool docstrings
-- **Flag if**: Missing or incomplete
-- **Severity**: Low
-
-#### Return Types
-- **Check**: Tool return values
-- **Flag if**: Unstructured returns
-- **Severity**: Low
-
-#### System Prompt Structure
-- **Check**: Prompt completeness
-- **Flag if**: Missing role, workflow, or stopping criteria
-- **Severity**: Medium
+Apply the best-practice checks in section 3 of `${CLAUDE_PLUGIN_ROOT}/agents/code-reviewer.md` (tool naming, docstrings, return types, system prompt structure, context schema). A system prompt missing role, workflow or stopping criteria is Medium; the other best-practice findings are Low.
 
 ### Step 6: Maturity Assessment
 

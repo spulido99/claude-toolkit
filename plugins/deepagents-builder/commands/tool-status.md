@@ -36,7 +36,7 @@ Exit.
 
 ### Step 2: Score Each Tool (11-Principle Checklist)
 
-The **[Tool Quality Checklist](../skills/tool-design/references/tool-quality-checklist.md)** is the authoritative source for what each principle means and which are critical — this step does not restate the principles. It only encodes the **static-analysis pass condition** that turns each principle into one point of the 0–11 score. If a principle's definition changes, update the checklist first, then sync the matching pass condition below.
+The **[Tool Quality Checklist](${CLAUDE_PLUGIN_ROOT}/skills/tool-design/references/tool-quality-checklist.md)** defines what each principle means and which are critical. This step encodes only the **static-analysis pass condition** that turns each principle into one point of the 0–11 score. If a principle's definition changes, update the checklist first, then sync the matching pass condition below.
 
 For each tool, award one point per principle whose pass condition holds (static analysis, no execution needed):
 
@@ -110,9 +110,9 @@ The 11-principle score is **static, per-tool analysis only**. Three catalog-leve
 - **Bounded Contexts** — any domain with more than 10 tools?
 - **Parity** — any UI action with no corresponding tool?
 
-These map to the [Catalog-Level Principles](../skills/tool-design/references/agent-native-principles.md) reference of the skill.
+These map to the [Catalog-Level Principles](${CLAUDE_PLUGIN_ROOT}/skills/tool-design/references/agent-native-principles.md) reference of the skill.
 
 ## References
 
-- **[AI-Friendly Tool Design](../skills/tool-design/SKILL.md)** — The 11 principles this dashboard scores against.
-- **[Tool Quality Checklist](../skills/tool-design/references/tool-quality-checklist.md)** — Full, authoritative quality verification checklist.
+- **[AI-Friendly Tool Design](${CLAUDE_PLUGIN_ROOT}/skills/tool-design/SKILL.md)** — The 11 principles this dashboard scores against.
+- **[Tool Quality Checklist](${CLAUDE_PLUGIN_ROOT}/skills/tool-design/references/tool-quality-checklist.md)** — Full, authoritative quality verification checklist.

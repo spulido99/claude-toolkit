@@ -62,7 +62,7 @@ version = "0.1.0"
 description = "{description}"
 requires-python = ">=3.11"
 dependencies = [
-    "deepagents>=1.0.0",
+    "deepagents>=0.7",
     "python-dotenv>=1.0.0",
 ]
 
@@ -187,47 +187,7 @@ LANGSMITH_PROJECT=your-project-name
 
 #### src/{project_name}/chat.py
 
-```python
-# src/{project_name}/chat.py
-"""Interactive chat console for testing your agent."""
-import uuid
-from .agent import create_agent  # adjust based on agent type
-from langgraph.checkpoint.memory import MemorySaver
-
-def main():
-    agent = create_agent()
-    thread_id = str(uuid.uuid4())
-    config = {"configurable": {"thread_id": thread_id}}
-
-    print("Chat with your agent (type 'exit' to quit, 'new' for new thread)")
-    while True:
-        user_input = input("\nYou: ").strip()
-        if not user_input:
-            continue
-        if user_input.lower() in ("exit", "quit"):
-            break
-        if user_input.lower() == "new":
-            thread_id = str(uuid.uuid4())
-            config = {"configurable": {"thread_id": thread_id}}
-            print(f"  New thread: {thread_id[:8]}...")
-            continue
-
-        result = agent.invoke(
-            {"messages": [{"role": "user", "content": user_input}]},
-            config=config,
-        )
-
-        for msg in result["messages"]:
-            if hasattr(msg, "tool_calls") and msg.tool_calls:
-                for tc in msg.tool_calls:
-                    args = ", ".join(f"{k}={v!r}" for k, v in tc["args"].items())
-                    print(f"  Tool: {tc['name']}({args})")
-
-        print(f"\nAgent: {result['messages'][-1].content}")
-
-if __name__ == "__main__":
-    main()
-```
+Generate the chat console by following the steps and template in `${CLAUDE_PLUGIN_ROOT}/commands/add-interactive-chat.md`, with these values already known so you can skip its detection and feature questions: `agent_module` is `{project_name}.agent`, `agent_function` is the creation function written above for the chosen agent type (`create_agent`, `create_research_agent` or `create_customer_service_agent`), `has_checkpointer` is true (the agent code above passes `MemorySaver()`), no context injection, no multi-user, summary logging. Write the file to `src/{project_name}/chat.py`.
 
 ### Step 5: Setup Instructions
 

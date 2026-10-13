@@ -63,7 +63,7 @@ Domain: Support
 
 **Step 2.3: Assign Operation Levels**
 
-For each capability, assign an operation level (1-5) **by impact, not HTTP verb**. Quick scale: 1 Read, 2 Create/List, 3 Update, 4 Financial, 5 Irreversible. The level definitions and confirmation requirements per level live in the tool-design skill — `references/agent-native-principles.md` (Principle 8) is canonical.
+For each capability, assign an operation level (1-5) **by impact, not HTTP verb**. Quick scale: 1 Read, 2 Create/List, 3 Update, 4 Financial, 5 Irreversible. The level definitions and confirmation requirements per level are in `${CLAUDE_PLUGIN_ROOT}/skills/tool-design/references/agent-native-principles.md` (Principle 8); read that section when assigning levels.
 
 **Step 2.4: Identify Confirmation Flows**
 
@@ -152,7 +152,7 @@ domains/
     formatters.py
 ```
 
-Each tool follows the standard pattern. For tools that need secure context injection, use `ToolRuntime` from `langchain.tools` (see [API Cheatsheet](../skills/patterns/references/api-cheatsheet.md) §3).
+Each tool follows the standard pattern. For tools that need secure context injection, use `ToolRuntime` from `langchain.tools` (see [API Cheatsheet](${CLAUDE_PLUGIN_ROOT}/skills/patterns/references/api-cheatsheet.md) §3).
 
 ```python
 from langchain.tools import tool
@@ -224,7 +224,7 @@ Use Write to create the files in the user's project directory. For each domain:
 
 ### Phase 5: Verification
 
-The **Tool Quality Checklist** (`skills/tool-design/references/tool-quality-checklist.md`) is the authoritative source for the checks and which are critical — read it and run every applicable check against every generated tool. Do not restate the checklist here; it evolves with the skill.
+Read the Tool Quality Checklist at `${CLAUDE_PLUGIN_ROOT}/skills/tool-design/references/tool-quality-checklist.md` and run every applicable check against every generated tool; it names which checks are critical.
 
 Report results as a table with pass/fail per tool and category. Suggest fixes for any failures.
 
@@ -273,19 +273,7 @@ Present spec for approval before generating code.
 
 ## Key Principles Reference
 
-These 11 principles from the tool-design skill guide every decision (see `skills/tool-design/SKILL.md` for full details):
-
-1. **Semantic Clarity** -- Name tools by domain operation, not CRUD verbs
-2. **Natural Language Compatibility** -- Descriptions state when to use AND when not to use (boundaries with sibling tools)
-3. **Structured Types** -- Use JSON Schema with explicit types, constraints, and enums; paginate with announced truncation
-4. **Actionable Errors** -- Errors include code, message, remediation, and suggested next tools
-5. **Consistent Terminology** -- One term per concept across the entire tool catalog
-6. **Rich Response Semantics** -- High-signal envelope: data + formatted, no duplicated representations
-7. **Available Actions (Tool Graph)** -- Include only where they carry server state or a curated nudge; omit catalog restatements
-8. **Operation Levels** -- Classify tools 1-5 by impact; map to `interrupt_on` keyed by tool name
-9. **Delegated Confirmations** -- Level 3+ tools stage and return pending_confirmation before executing
-10. **Idempotency Keys** -- Server-emitted idempotency_key, echoed by the agent on confirm/retries
-11. **Secure Parameters** -- No caller identity, credentials, or tokens as parameters; inject via framework (ToolRuntime / `x-claims`)
+Design every tool against all 11 principles in `${CLAUDE_PLUGIN_ROOT}/skills/tool-design/SKILL.md`; read it before Phase 1 and re-check each generated tool against it. Where a summary there is not enough, follow its pointer to the full reference.
 
 ## Output
 

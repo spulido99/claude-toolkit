@@ -328,5 +328,5 @@ The task tool allows you to spawn subagents.
 For more patterns and examples:
 
 - **`../SKILL.md`** - Main patterns documentation with security guidance
-- **`anti-patterns.md`** - 16 anti-patterns with fixes
+- **`anti-patterns.md`** - anti-patterns with fixes
 - **`tool-patterns.md`** - Tool design patterns
