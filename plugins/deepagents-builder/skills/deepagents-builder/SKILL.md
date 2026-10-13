@@ -9,7 +9,7 @@ The map of this plugin. Find the user's task in the table, then load what the ro
 
 ## Stack
 
-- **Language and library:** Python with LangChain's `deepagents` (`create_deep_agent`). The canonical API and version notes live in the `patterns` skill's `references/api-cheatsheet.md`.
+- **Language and library:** Python with LangChain's `deepagents` (`create_deep_agent`). The canonical API and version notes live in `${CLAUDE_PLUGIN_ROOT}/skills/patterns/references/api-cheatsheet.md`.
 - **Runtime:** the guidance holds on any runtime: local, LangGraph Platform, AWS Bedrock AgentCore, or the team's own server. Take the runtime from the project; none is the default.
 
 ## Branches

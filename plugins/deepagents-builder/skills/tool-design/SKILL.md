@@ -1,6 +1,6 @@
 ---
 name: tool-design
-description: This skill should be used when the user asks to "design tools", "create tools for agent", "tool design", "API to tools", "define tools", "convert API to tools", or needs guidance on designing AI-friendly tools for agents — LangChain `@tool` functions, MCP tool definitions, or DeepAgents tool catalogs. Provides principles from AI-Friendly API Design, Agent Native architecture, and real-world tool catalogs.
+description: "Eleven principles for AI-friendly agent tools: LangChain @tool functions, MCP tool definitions, deepagents tool catalogs. Use when designing tools, converting an API into tools, or reviewing a tool's name, parameters, errors, or confirmation level."
 ---
 
 # AI-Friendly Tool Design

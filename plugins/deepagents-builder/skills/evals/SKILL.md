@@ -1,6 +1,6 @@
 ---
 name: Evals-Driven Development
-description: This skill should be used when the user asks to "evaluate agents", "test agent", "create eval dataset", "design evals", "benchmark agent", "debug agent", "run evals", or needs guidance on testing, evaluating, and iterating on deep agent systems using an evals-driven approach.
+description: "Evals-driven development for deepagents agents: JTBD scenarios, evaluators, snapshots, mocks, and security evals. Use when defining what to test, writing or running evals, or debugging a failing agent."
 ---
 
 # Evals-Driven Development (EDD)

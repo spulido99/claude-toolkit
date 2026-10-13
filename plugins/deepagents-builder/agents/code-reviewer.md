@@ -4,23 +4,7 @@ tools:
   - Read
   - Glob
   - Grep
-description: |
-  Reviews DeepAgents code for anti-patterns, security issues, and best practices. Use this agent proactively when the user has written agent code that should be reviewed for quality and security.
-
-  <example>
-  User: Here's my agent code, can you review it?
-  Action: Use code-reviewer to analyze for anti-patterns and security issues
-  </example>
-
-  <example>
-  User: I finished implementing my customer support agent
-  Action: Use code-reviewer to validate the implementation
-  </example>
-
-  <example>
-  User: Is my agent setup correct?
-  Action: Use code-reviewer to check configuration and patterns
-  </example>
+description: Reviews deepagents agent code for anti-patterns, security issues, and API misuse. Use after agent code is written or changed.
 ---
 
 # DeepAgents Code Reviewer

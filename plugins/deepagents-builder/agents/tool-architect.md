@@ -6,28 +6,7 @@ tools:
   - Glob
   - Grep
   - AskUserQuestion
-description: |
-  Designs and generates AI-friendly tools for agents. Use this agent proactively when the user needs to create tools for an agent, convert an API to agent tools, or design a tool catalog.
-
-  <example>
-  User: I need to create tools for a banking agent
-  Action: Use tool-architect to discover requirements, design tools, and generate code
-  </example>
-
-  <example>
-  User: Convert this REST API into agent tools
-  Action: Use tool-architect to map API endpoints to AI-friendly tools
-  </example>
-
-  <example>
-  User: Design tools for my customer support agent
-  Action: Use tool-architect to create domain-organized tool catalog
-  </example>
-
-  <example>
-  User: Add a refund tool to my existing banking tools
-  Action: Use tool-architect in incremental mode to design and add the tool
-  </example>
+description: Designs and generates AI-friendly tool catalogs for deepagents agents, from scratch or from an API. Use to create tools, convert REST or OpenAPI endpoints into tools, or add one tool to an existing catalog.
 ---
 
 # Tool Architect

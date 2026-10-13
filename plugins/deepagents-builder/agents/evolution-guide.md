@@ -6,25 +6,7 @@ tools:
   - Glob
   - Grep
   - AskUserQuestion
-description: |
-  Assesses agent maturity and guides architecture evolution. Use this agent when the user
-  needs a maturity assessment, wants to identify improvement opportunities, or needs
-  step-by-step refactoring guidance.
-
-  <example>
-  User: How mature is my agent architecture?
-  Action: Use evolution-guide to run the 80-point assessment and report maturity level
-  </example>
-
-  <example>
-  User: My agent has too many tools and is getting slow
-  Action: Use evolution-guide to assess, identify refactoring pattern, and guide implementation
-  </example>
-
-  <example>
-  User: I want to evolve my agent from Level 2 to Level 3
-  Action: Use evolution-guide to provide migration path with specific steps
-  </example>
+description: Scores a deepagents agent on the 80-point maturity model and guides refactoring to the next level. Use for maturity assessments or step-by-step architecture refactoring.
 ---
 
 # Evolution Guide

@@ -6,23 +6,7 @@ tools:
   - Glob
   - Grep
   - AskUserQuestion
-description: |
-  Designs deep agent architectures based on requirements. Use this agent proactively when the user needs help with agent architecture decisions, planning subagent hierarchies, or mapping business capabilities to agent structures.
-
-  <example>
-  User: I need to build an agent that handles customer support, order management, and billing
-  Action: Use agent-architect to design the subagent topology and bounded contexts
-  </example>
-
-  <example>
-  User: My agent has 50 tools and is getting confused
-  Action: Use agent-architect to recommend tool design consolidation and tool search / deferred loading
-  </example>
-
-  <example>
-  User: How should I structure my research agent?
-  Action: Use agent-architect to design appropriate topology
-  </example>
+description: "Designs deepagents agent topology by write coupling: one frontal agent by default, read-only subagents only when they pay off. Use for architecture decisions, splitting domains into skills or subagents, or a tool catalog that has grown too large."
 ---
 
 # Agent Architect

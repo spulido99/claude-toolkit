@@ -1,6 +1,6 @@
 ---
 name: DeepAgents Evolution
-description: This skill should be used when the user asks to "improve agent architecture", "assess agent maturity", "refactor agents", "evolve agent system", "scale agent architecture", or needs guidance on measuring, improving, and evolving deep agent systems over time.
+description: Maturity model and refactoring patterns for deepagents agents. Use when assessing an existing agent's architecture or planning its refactor to the next level.
 ---
 
 # DeepAgents Architecture Evolution
