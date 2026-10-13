@@ -101,6 +101,35 @@ End-to-end patterns for building Expo / React Native apps with the managed workf
 
 Test with the harness in `plugins/dev-patterns/skills/expo-react-native/scripts/` (RED/GREEN scenarios same pattern as `dynamodb-design`).
 
+### `bedrock-agentcore`
+
+Patterns for running a Python agent (LangGraph or deepagents) on Amazon Bedrock AgentCore Runtime, taken from the code and the deploy history of several production and prototype projects. It covers the runtime and the services around it. Agent design inside the graph stays in the `deepagents-builder` plugin, general CDK in `aws-cdk-patterns`, and the checkpoint table design in `dynamodb-design`.
+
+**Decision tree** (in `SKILL.md`) routes by task:
+
+| Task | Reference file |
+|------|----------------|
+| Starting a new agent, or choosing zip vs container, L1 vs L2, AgentCore Memory vs own checkpointer, Bedrock vs provider API | `00-decisions.md` |
+| `main.py`, zip packaging, CDK runtime construct, runtime IAM role, CI deploy order | `01-runtime-and-deploy.md` |
+| `runtimeSessionId`, idle timeout, Cognito JWT authorizer, SigV4 invoker, retries, limits | `02-invocation-and-sessions.md` |
+| Turns longer than 29 s, fire-and-forget handlers, live progress over AppSync Events, thread memory | `03-long-turns-and-state.md` |
+| Traces, alarms, evals against the deployed runtime, smoke tests | `04-observability-and-evals.md` |
+| Diagnosing an AgentCore error | `05-gotchas.md` |
+
+**Key topics covered:**
+
+- "AgentCore first" inventory: which AgentCore services to adopt now (Runtime, Observability), which to defer, and the condition to reopen each one
+- Direct code deployment (zip in S3, `PYTHON_3_13`, arm64 wheels with `--only-binary=:all:`, both size quotas checked before upload) instead of a container image
+- `CfnRuntime` (L1) and the alpha `Runtime` (L2) side by side, `PlatformVersion: V2` through a property override, a new artifact key on every deploy, `addDependency(role)`
+- What runs at import and what waits for the first invocation, for V1's 30 s init limit and V2's snapshot start
+- One `runtimeSessionId` per conversation (33+ characters, the same string from every caller), the idle-timeout cost, retries for 409 and 424 while a session starts
+- Cognito JWT authorizer with `allowedClients` and `requestHeaderAllowlist: ['Authorization']`, SigV4 invocation from a backend, identity passed to tools through configuration
+- Fire-and-forget turns with `add_async_task`, conditional writes for runs that outlive their caller, live progress over AppSync Events
+- OpenTelemetry on a direct-code runtime, the IAM and account setup traces need, content capture off, alarms that fire on a single failed turn
+- Evals and smoke tests that hit the deployed runtime through real authentication
+
+Every mechanical rule ships with a check (pytest, jest, or shell). Test with the harness in `plugins/dev-patterns/skills/bedrock-agentcore/scripts/`.
+
 ## Installation
 
 This plugin is part of the `claude-skills` marketplace. Install via Claude Code plugin marketplace or clone the repo and point Claude Code at the plugin directory.
@@ -143,6 +172,18 @@ Each skill ships with its own RED/GREEN test harness. Pick the variant for your 
 
 ```bash
 ./plugins/dev-patterns/skills/expo-react-native/scripts/test-skill.sh
+```
+
+**`bedrock-agentcore` — Windows (PowerShell 7+):**
+
+```powershell
+.\plugins\dev-patterns\skills\bedrock-agentcore\scripts\test-skill.ps1
+```
+
+**`bedrock-agentcore` — Mac / Linux / Git Bash:**
+
+```bash
+./plugins/dev-patterns/skills/bedrock-agentcore/scripts/test-skill.sh
 ```
 
 All variants run the same two phases for every scenario in the matching `tests/scenarios.txt`:
