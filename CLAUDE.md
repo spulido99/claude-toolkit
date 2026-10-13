@@ -26,6 +26,8 @@ Follow Claude Code plugin structure with `plugin.json` manifest. Can include age
 
 Claude Code only pulls an update when the version increases. Forgetting either file — especially the marketplace entry — means the change never reaches installed instances. Commit the bump together with the change.
 
+Before committing a plugin change, run `python3 scripts/check-plugin-versions.py --base master` and `claude plugin validate --strict plugins/<plugin>`; CI (`.github/workflows/plugins.yml`) runs both on every PR and push to master.
+
 ### Commands
 Slash commands with YAML frontmatter for arguments and descriptions.
 
