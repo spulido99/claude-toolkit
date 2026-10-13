@@ -147,7 +147,7 @@ As the agent grows, assess its architecture and evolve it:
 
 ## Plugin Evals
 
-`evals/` checks that prompts phrased like real requests ("usa el skill de deepagents-builder…") load a plugin skill through the Skill tool. Disable the installed copy first so the run loads this folder, and re-enable it after:
+`evals/` checks that prompts phrased like real requests ("usa el skill de deepagents-builder…") load a plugin skill (Skill tool) or delegate to a plugin agent (Agent tool), instead of reading plugin files by hand. Disable the installed copy first so the run loads this folder, and re-enable it after:
 
 ```
 claude plugin disable deepagents-builder@spuli-plugins
