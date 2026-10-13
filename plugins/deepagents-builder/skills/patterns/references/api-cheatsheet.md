@@ -546,5 +546,5 @@ Notes:
 
 - **`tool-patterns.md`** — Tool definition patterns and security with ToolRuntime
 - **`security-patterns.md`** — Security patterns with backends and AGENTS.md protection
-- **`anti-patterns.md`** — 19 common mistakes to avoid
+- **`anti-patterns.md`** — common mistakes to avoid
 - **`prompt-patterns.md`** — System prompt patterns for subagents

@@ -209,70 +209,18 @@ agent = create_deep_agent(model=model, system_prompt="...", tools=[...])
 
 ## Interactive Chat Console
 
-Test your agent interactively with tool call logging:
-
-```python
-# chat.py
-import uuid
-from deepagents import create_deep_agent
-from langgraph.checkpoint.memory import MemorySaver
-
-def create_my_agent():
-    return create_deep_agent(
-        model="anthropic:claude-sonnet-4-5-20250929",
-        tools=[...],
-        system_prompt="Your system prompt here.",
-        checkpointer=MemorySaver(),
-    )
-
-def main():
-    agent = create_my_agent()
-    thread_id = str(uuid.uuid4())
-    config = {"configurable": {"thread_id": thread_id}}
-
-    print("Chat with your agent (type 'exit' to quit, 'new' for new thread)")
-    while True:
-        user_input = input("\nYou: ").strip()
-        if not user_input:
-            continue
-        if user_input.lower() in ("exit", "quit", "salir"):
-            break
-        if user_input.lower() in ("new", "nuevo"):
-            thread_id = str(uuid.uuid4())
-            config = {"configurable": {"thread_id": thread_id}}
-            print(f"  New thread: {thread_id[:8]}...")
-            continue
-
-        result = agent.invoke(
-            {"messages": [{"role": "user", "content": user_input}]},
-            config=config,
-        )
-
-        # Log tool calls
-        for msg in result["messages"]:
-            if hasattr(msg, "tool_calls") and msg.tool_calls:
-                for tc in msg.tool_calls:
-                    args = ", ".join(f"{k}={v!r}" for k, v in tc["args"].items())
-                    print(f"  Tool: {tc['name']}({args})")
-
-        print(f"\nAgent: {result['messages'][-1].content}")
-
-if __name__ == "__main__":
-    main()
-```
-
-Use `/add-interactive-chat` to generate a chat console tailored to your specific agent.
+Run `/add-interactive-chat` to generate a `chat.py` console for your agent: it keeps one `thread_id` per conversation (the `checkpointer` + `thread_id` pattern shown above), logs every tool call, and supports `new` and `exit` commands. The template it follows is `${CLAUDE_PLUGIN_ROOT}/commands/add-interactive-chat.md`.
 
 ## Next Steps
 
 After basic setup, explore:
 
-- **[Architecture](../architecture/SKILL.md)**: Design agent topologies and bounded contexts
-- **[Patterns](../patterns/SKILL.md)**: System prompts, tool design, anti-patterns
-- **[Tool Design](../tool-design/SKILL.md)**: AI-friendly tool design principles. Run `/design-tools` to create your tool catalog.
-- **[Evals](../evals/SKILL.md)**: Evals-Driven Development — design scenarios, build datasets, iterate. Run `/design-evals` to get started.
-- **[Evolution](../evolution/SKILL.md)**: Maturity model and refactoring. Run `/assess` to check your agent's maturity level.
-- **[API Cheatsheet](../patterns/references/api-cheatsheet.md)**: Quick reference for `create_deep_agent` parameters
+- **[Architecture](${CLAUDE_PLUGIN_ROOT}/skills/architecture/SKILL.md)**: Design agent topologies and bounded contexts
+- **[Patterns](${CLAUDE_PLUGIN_ROOT}/skills/patterns/SKILL.md)**: System prompts, tool design, anti-patterns
+- **[Tool Design](${CLAUDE_PLUGIN_ROOT}/skills/tool-design/SKILL.md)**: AI-friendly tool design principles. Run `/design-tools` to create your tool catalog.
+- **[Evals](${CLAUDE_PLUGIN_ROOT}/skills/evals/SKILL.md)**: Evals-Driven Development — design scenarios, build datasets, iterate. Run `/design-evals` to get started.
+- **[Evolution](${CLAUDE_PLUGIN_ROOT}/skills/evolution/SKILL.md)**: Maturity model and refactoring. Run `/assess` to check your agent's maturity level.
+- **[API Cheatsheet](${CLAUDE_PLUGIN_ROOT}/skills/patterns/references/api-cheatsheet.md)**: Quick reference for `create_deep_agent` parameters
 
 ### Commands
 

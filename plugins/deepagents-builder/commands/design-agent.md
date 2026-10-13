@@ -88,7 +88,7 @@ Based on the approved specification:
 Code requirements:
 - Use `system_prompt=` parameter (not `prompt=`)
 - Include `MemorySaver()` as checkpointer
-- Follow patterns from the quickstart skill
+- Follow the patterns in `${CLAUDE_PLUGIN_ROOT}/skills/quickstart/SKILL.md`
 
 ### Step 8: Confirm & Suggest Next Steps
 

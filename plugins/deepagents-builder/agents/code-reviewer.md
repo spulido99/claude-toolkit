@@ -15,76 +15,17 @@ You are an expert code reviewer specializing in DeepAgents implementations. Anal
 
 ### 1. Anti-Patterns
 
-Check for these common mistakes:
+Check the code against every anti-pattern in `${CLAUDE_PLUGIN_ROOT}/skills/patterns/references/anti-patterns.md` (use its Detection Checklist as the pass list) and report each match with file and line, together with the fix from the catalog. Never recommend subagents because of tool count alone; the catalog's God Agent entry gives the order of fixes.
 
-**God Agent**
-- 10+ tools without tool search/skills (no disclosure mechanism), plus tool name/description overlap
-- Recommendation: cure ladder — (1) tool design (consolidate/rename overlapping tools), (2) tool search / deferred loading via `middleware=` (`ProviderToolSearchMiddleware` or `LLMToolSelectorMiddleware`), (3) subagents ONLY if read-only parallelizable work remains that pays the ~15x token overhead. Never recommend subagents by tool count.
-
-**Fragmented Writes**
-- Write-capable tools distributed across subagents when the writes are coupled in one thread
-- Recommendation: concentrate writes in a single frontal agent (assistant pattern)
-
-**Unclear Boundaries**
-- Ambiguous or overlapping subagent descriptions
-- Recommendation: Make descriptions specific
-
-**Parallel Decision-Making**
-- Multiple subagents that could make conflicting choices
-- Recommendation: Sequential execution with handoff
-
-**Vocabulary Collision**
-- Same term used differently across agents
-- Recommendation: Explicit vocabulary in system prompts
-
-**One-Time Subagent**
-- Subagent with only 1-2 tools (overhead not justified)
-- Recommendation: Move tools to main agent
-
-**Premature Decomposition**
-- Complex architecture for simple tasks
-- Recommendation: Start simple
+Severity: God Agent, Fragmented Writes and Parallel Decision-Making are Critical. Unclear Boundaries, Vocabulary Collision and Premature Decomposition are Warnings. One-Time Subagent is a Suggestion. Rate any other match by impact.
 
 ### 2. Security Issues
 
-**Critical: User IDs as Tool Parameters**
-```python
-# BAD - user_id exposed to LLM
-@tool
-def get_account(user_id: str) -> dict:
-    ...
+For the fix code of each issue below, read `${CLAUDE_PLUGIN_ROOT}/skills/patterns/references/security-patterns.md` and compare the code against it.
 
-# GOOD - use ToolRuntime
-@tool
-def get_account(runtime: ToolRuntime[Context]) -> dict:
-    user_id = runtime.context.user_id
-    ...
-```
-
-**Critical: Missing Checkpointer for HITL**
-```python
-# BAD - interrupt_on without checkpointer
-agent = create_deep_agent(
-    interrupt_on={"delete_db": {...}}
-)
-
-# GOOD - with checkpointer
-agent = create_deep_agent(
-    checkpointer=MemorySaver(),
-    interrupt_on={"delete_db": {...}}
-)
-```
-
-**Medium: Destructive Tools Without Approval**
-```python
-# BAD - no approval for delete
-tools = [delete_database, ...]
-
-# GOOD - require approval
-interrupt_on = {
-    "delete_database": {"allowed_decisions": ["approve", "reject"]}
-}
-```
+- **Critical: User IDs as tool parameters.** Flag any tool parameter such as `user_id` or `account_id` that the LLM can set; these values must come from `ToolRuntime` context.
+- **Critical: Missing checkpointer for HITL.** Flag `interrupt_on` without a `checkpointer=`; interrupts cannot resume without one.
+- **Medium: Destructive tools without approval.** Flag tools that delete, modify or send and have no `interrupt_on` entry keyed by tool name.
 
 ### 3. Best Practices
 

@@ -565,7 +565,7 @@ def get_account_balances(include_details: bool = False) -> dict:
     }
 ```
 
-**Reference**: See [Tool Design](../../tool-design/SKILL.md) for the complete response pattern.
+**Reference**: See [Tool Design](${CLAUDE_PLUGIN_ROOT}/skills/tool-design/SKILL.md) for the complete response pattern.
 
 ---
 
@@ -597,11 +597,36 @@ tools = [
 
 **Key insight**: If you need to explain what the tool does beyond its name, the name needs improvement.
 
+## Anti-Pattern 20: Fragmented Writes
+
+**Symptom**: Write-capable tools are spread across subagents even though the writes are coupled to decisions made in the same conversation thread. Each subagent is stateless in messages, so it loses the thread.
+
+**Example**:
+```python
+# ❌ BAD: Coupled writes split across subagents
+subagents = [
+    {"name": "ticket-writer", "tools": [create_ticket, update_ticket]},
+    {"name": "order-writer", "tools": [create_order, cancel_order]},
+]
+# The customer's decision in the thread drives both writes,
+# but neither subagent sees the thread.
+```
+
+**Fix**: Concentrate the writes in a single frontal agent (assistant pattern)
+```python
+# ✅ GOOD: One frontal agent owns the writes
+agent = create_deep_agent(
+    tools=[create_ticket, update_ticket, create_order, cancel_order],
+    skills=["./skills/"],  # domain knowledge as skills, not subagents
+)
+# Subagents stay for read-only, parallelizable work.
+```
+
 ---
 
 ## Detection Checklist
 
-Run through this checklist to identify anti-patterns (19 total):
+Run through this checklist to identify anti-patterns (20 total):
 
 **Classic Anti-Patterns (1-10):**
 - [ ] Can subagents make conflicting decisions? (#1 Parallel Decision-Making)
@@ -625,3 +650,6 @@ Run through this checklist to identify anti-patterns (19 total):
 - [ ] Using `create_deep_agent` when planning/subagents/backends are needed? (#17 Low-Level API)
 - [ ] Tool responses include `formatted` + `available_actions`? (#18 Opaque Responses)
 - [ ] Tool names are domain-semantic, not generic CRUD? (#19 CRUD Names)
+
+**Topology Anti-Pattern (20):**
+- [ ] Are write-capable tools split across subagents when the writes are coupled in one thread? (#20 Fragmented Writes)

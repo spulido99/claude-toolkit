@@ -468,7 +468,7 @@ For complete mitigation strategies (4 strategies), content validation, rate limi
 
 The most common mistakes: God Agent (10+ tools without tool search/skills, plus name/description overlap — cured by tool design, then tool search, never by subagent-splitting-by-count), Unclear Boundaries (overlapping subagent responsibilities), Parallel Decision-Making (conflicting choices), Vocabulary Collision (same term means different things), and Premature Decomposition (over-splitting simple tasks).
 
-For the complete catalog of 19 anti-patterns with code examples and fixes, see **[`references/anti-patterns.md`](references/anti-patterns.md)**.
+For the complete anti-pattern catalog with code examples and fixes, see **[`references/anti-patterns.md`](references/anti-patterns.md)**.
 
 ## Prompt Checklist
 
@@ -502,7 +502,7 @@ For comprehensive patterns and examples:
 - **[API Cheatsheet](references/api-cheatsheet.md)** — Current DeepAgents API quick reference
 - **[Prompt Patterns](references/prompt-patterns.md)** — 5 prompt patterns with templates
 - **[Tool Patterns](references/tool-patterns.md)** — Complete tool design guide with ToolRuntime
-- **[Anti-Patterns](references/anti-patterns.md)** — 19 anti-patterns with fixes
+- **[Anti-Patterns](references/anti-patterns.md)** — anti-patterns with fixes
 - **[Security Patterns](references/security-patterns.md)** — Security strategies for customer-facing agents
 
 ### Related Skills
