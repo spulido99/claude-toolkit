@@ -1,0 +1,42 @@
+name: plugins
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Pick the base to compare against
+        id: base
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "ref=origin/${{ github.base_ref }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Versions in sync and bumped
+        run: python3 scripts/check-plugin-versions.py --base "${{ steps.base.outputs.ref }}"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Validate marketplace
+        run: claude plugin validate .
+
+      - name: Validate changed plugins (strict)
+        run: |
+          for p in $(python3 scripts/check-plugin-versions.py --base "${{ steps.base.outputs.ref }}" --list-changed); do
+            claude plugin validate --strict "plugins/$p"
+          done
