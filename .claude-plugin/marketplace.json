@@ -13,7 +13,7 @@
       "name": "deepagents-builder",
       "source": "./plugins/deepagents-builder",
       "description": "Build production-ready AI agents with LangChain's DeepAgents framework",
-      "version": "1.5.1",
+      "version": "1.6.0",
       "author": {
         "name": "spuli"
       }
