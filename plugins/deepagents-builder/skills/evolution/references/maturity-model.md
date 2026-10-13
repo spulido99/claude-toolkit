@@ -138,31 +138,43 @@ agent = create_deep_agent(
 
 ## Maturity Assessment
 
-Score your agent architecture (0-5 for each):
+Score each of the 16 items from 0 to 5 (4 categories x 4 items x 5 max = 80 points).
 
-### Structure
-- [ ] Topology fit (0: contradicts write coupling, 5: matches ADR — coupled writes in one agent, subagents read-only and ~15x-justified)
-- [ ] Bounded contexts as skills (0: none, 5: every domain packaged with progressive disclosure)
-- [ ] Business capability alignment (0: random, 5: perfect mapping)
-- [ ] Explicit contracts (0: implicit, 5: documented inputs/outputs for tools, skills, workers)
+### Structure (20 points)
 
-### Operations
-- [ ] Planning integration (0: none, 5: instructed thresholds, adaptive)
-- [ ] Context management (0: overflows, 5: summarization/compression tuned for the horizon)
-- [ ] Disclosure (0: full catalog always loaded, 5: tool search + skills disclosure operating)
-- [ ] Error handling (0: crashes, 5: graceful recovery)
+| Item | 0 | 1-2 | 3-4 | 5 |
+|------|---|-----|-----|---|
+| Topology fit | Contradicts write coupling (coupled writes split across subagents, or subagents-by-catalog-size) | Partially justified | Writes in one agent, most subagents read-only | Matches ADR: coupled writes single-agent; every subagent read-only, parallelizable, ~15x-justified |
+| Capability alignment | Tools dumped together | Basic grouping | Domain-organized | Business capability map |
+| Bounded contexts as skills | No separation | Some naming conventions | Some contexts packaged as skills | Every domain a skill with distinct vocabulary and progressive disclosure |
+| Contracts | Implicit everything | Some docstrings | Tool I/O contracts documented | Explicit contracts for tools, skills, and worker summaries |
 
-### Measurement
-- [ ] Telemetry (0: none, 5: cache/latency/tokens-per-episode tracked)
-- [ ] Eval coverage (0: none, 5: tool-selection, HITL, and disclosure suites running)
-- [ ] Documentation (0: none, 5: complete)
-- [ ] Monitoring (0: none, 5: real-time)
+### Operations (20 points)
 
-### Evolution
-- [ ] Refactoring capability (0: rigid, 5: easy changes)
-- [ ] Learning from usage (0: static, 5: adapts)
-- [ ] Experimentation (0: none, 5: A/B testing)
-- [ ] Feedback loops (0: none, 5: automated)
+| Item | 0 | 1-2 | 3-4 | 5 |
+|------|---|-----|-----|---|
+| Planning | No planning | Basic todos | Structured planning | Instructed thresholds, adaptive planning |
+| Context management | No management | Basic prompts | File-based context | Summarization/compression tuned to the horizon |
+| Disclosure | 10+ tools, all loaded up front | Tool design applied (no overlap) | Tool search OR skills operating | Tool search + skills; built-ins non-deferred; skills library deny-write protected |
+| Error handling | No handling | Basic try/catch | Actionable errors | Recovery strategies |
+
+### Measurement (20 points)
+
+| Item | 0 | 1-2 | 3-4 | 5 |
+|------|---|-----|-----|---|
+| Telemetry | No metrics | Manual observation | Basic logging | Cache hit rate, latency, tokens-per-episode tracked automatically |
+| Eval coverage | No tests | Some unit tests | Eval dataset exists | Tool-selection, HITL, and disclosure suites in an active EDD workflow |
+| Documentation | No docs | README only | Architecture documented | Living documentation |
+| Monitoring | No monitoring | Manual checks | Alerts on errors | Full observability |
+
+### Evolution (20 points)
+
+| Item | 0 | 1-2 | 3-4 | 5 |
+|------|---|-----|-----|---|
+| Refactoring capability | Monolith | Can split/merge | Pattern-based refactoring | Automated refactoring |
+| Usage learning | No learning | Manual review | Usage patterns tracked | Adaptive behavior |
+| Experimentation | No experiments | Ad-hoc testing | A/B testing capability | Continuous experimentation |
+| Feedback loops | No feedback | User feedback only | Metric-driven feedback | Self-improving loops |
 
 **Total Score (max 80):**
 - 0-20: Level 1 (Initial)

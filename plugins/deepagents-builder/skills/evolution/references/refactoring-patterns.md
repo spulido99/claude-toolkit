@@ -154,7 +154,7 @@ subagents = [
 
 ## Pattern 4: Promote to Main Agent
 
-**Problem:** Subagent used in 90%+ of tasks
+**Problem:** Subagent used in 90%+ of tasks, or a subagent holding coupled writes (inline it: move its write tools back into the frontal agent's thread, e.g. `subagents=[{"name": "payment-executor", "tools": [execute_payment]}]` becomes `tools=[execute_payment]`)
 
 **Before:**
 ```python
