@@ -165,7 +165,7 @@ Tool parameters are **fully controllable by the LLM**. No secret, credential, to
 Three catalog-level decisions, distinct from designing any single tool (not scored per-tool — they require judgment):
 
 - **Granularity**: one tool = one unit of **user intent**, not one backend endpoint. Merge sequences whose intermediate result has no standalone use; split tools that hide steps the agent needs to compose or retry. The natural seam is the `pending_confirmation` boundary: one *prepare* tool + one *execute* tool.
-- **Bounded Contexts**: domain modules with their own `tools.py`, `schemas.py`, `formatters.py` and a `TOOLS` export. Suggested defaults: ~10 tools per domain; ~15+ tools total → consider domain subagents (see the `architecture` skill).
+- **Bounded Contexts**: domain modules with their own `tools.py`, `schemas.py`, `formatters.py` and a `TOOLS` export. Suggested default: ~10 tools per domain; at 10+ tools or >10k tokens of definitions, add tool search to the same agent (see the `architecture` skill).
 - **Parity**: every user-facing UI action has a tool or a documented intentional exclusion.
 
 **Full reference**: [agent-native-principles.md — Catalog-Level Principles](references/agent-native-principles.md)
@@ -214,6 +214,6 @@ Routing by task:
 
 ## Related
 
-- **[Tool Patterns](../patterns/references/tool-patterns.md)** — Design patterns for tool granularity, naming, and security (ToolRuntime)
-- **[API Cheatsheet](../patterns/references/api-cheatsheet.md)** — Quick reference for API-to-tool conversion
-- **[Evals](../evals/SKILL.md)** — Test Operation Level flows (`pending_confirmation`, `interrupt_on`), idempotency, error response suggestions, and tool graph navigation
+- **[Tool Patterns](${CLAUDE_PLUGIN_ROOT}/skills/patterns/references/tool-patterns.md)** — Design patterns for tool granularity, naming, and security (ToolRuntime)
+- **[API Cheatsheet](${CLAUDE_PLUGIN_ROOT}/skills/patterns/references/api-cheatsheet.md)** — Quick reference for API-to-tool conversion
+- **[Evals](${CLAUDE_PLUGIN_ROOT}/skills/evals/SKILL.md)** — Test Operation Level flows (`pending_confirmation`, `interrupt_on`), idempotency, error response suggestions, and tool graph navigation
