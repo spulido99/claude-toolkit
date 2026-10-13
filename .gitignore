@@ -28,3 +28,6 @@ npm-debug.log*
 .env
 .env.local
 .env.*.local
+
+# claude plugin eval output
+plugins/*/evals/results/
