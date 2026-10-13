@@ -18,15 +18,7 @@ Execute eval scenarios against the agent and report results.
 
 ### Step 1: Parse Arguments
 
-Determine run mode from `$ARGUMENTS`:
-
-| Argument | Mode | Description |
-|----------|------|-------------|
-| (none) | Snapshot | Compare trajectories against snapshots. Fast, free. |
-| `--smoke` | Smoke | Only `@smoke`-tagged scenarios. Fastest. |
-| `--full` | Full | Tier 2 simulated users + strong LLM judge. Pre-merge. |
-| `--report` | Report | Re-run + show trajectory diffs for failures. |
-| `--diagnose` | Diagnose | Re-run + LLM analysis of failures with suggestions. |
+Determine run mode from `$ARGUMENTS`. Pick the mode that `${CLAUDE_PLUGIN_ROOT}/skills/evals/SKILL.md` § Run Modes assigns to the argument (no argument means snapshot mode).
 
 ### Step 2: Validate Setup
 
@@ -47,24 +39,10 @@ Hand off to the `eval-runner` agent with:
 
 ### Step 4: Display Results
 
-The eval-runner returns results. Display based on mode:
+The eval-runner returns results. Display them in the shape of Level 1 in `${CLAUDE_PLUGIN_ROOT}/skills/evals/references/03-dev-workflow.md` § Failure Investigation UX, and add by mode:
 
-**Snapshot/Smoke**:
-```
-✓ N passed | ✗ N failed | ~ N changed
+- **Report**: trajectory diffs for each failure (Level 2).
+- **Diagnose**: LLM diagnosis with root cause and suggested fixes (Level 3).
+- **Full**: Tier 2 results with LLM judge scores.
 
-FAILED: {scenario_name}
-  Expected: [tools...]
-  Actual:   [tools...]
-  → /eval --report for diff | /eval --diagnose for analysis
-
-CHANGED: {scenario_name}
-  {one-line diff description}
-  → /eval-update to review and accept/reject
-```
-
-**Report**: Include trajectory diffs for each failure.
-
-**Diagnose**: Include LLM diagnosis with root cause and suggested fixes.
-
-**Full**: Include Tier 2 results with LLM judge scores.
+End each CHANGED scenario with `→ /eval-update to review and accept/reject`.

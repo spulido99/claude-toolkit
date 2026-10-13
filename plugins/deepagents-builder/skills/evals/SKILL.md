@@ -359,6 +359,16 @@ See [`references/02-evaluators.md`](references/02-evaluators.md) for the full ev
 
 ## Step 4: Dev Workflow
 
+### Run Modes (`/eval`)
+
+| Argument | Mode | What it does | Command |
+|----------|------|--------------|---------|
+| (none) | Snapshot | Compare trajectories against snapshots. Fast, free. | `pytest evals/ -v` |
+| `--smoke` | Smoke | Only `@smoke`-tagged scenarios. Fastest. | `pytest evals/ -m smoke -v` |
+| `--full` | Full | Tier 2 simulated users + strong LLM judge. Pre-merge. | `pytest evals/ --full --model openai:o3-mini` |
+| `--report` | Report | Re-run + show trajectory diffs for failures. | Same as snapshot, then diff each failure |
+| `--diagnose` | Diagnose | Re-run + LLM analysis of failures with suggestions. | Same as snapshot, then analyze each failure |
+
 ### Snapshot Testing (Default Inner Loop)
 
 First run generates trajectory snapshots. Subsequent runs compare against them — no LLM judge needed.

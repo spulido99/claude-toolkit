@@ -25,31 +25,15 @@ You are an expert in executing eval suites, managing trajectory snapshots, and a
 
 ### Step 1: Load Datasets
 
-Find and load scenario datasets:
-
-```python
-# Discover dataset files
-datasets = glob("evals/datasets/*.yaml") + glob("evals/datasets/*.json")
-
-# For multi-agent projects, also check per-agent evals:
-# agents/*/evals/datasets/*.yaml
-```
+Find and load every scenario dataset: `evals/datasets/*.yaml` and `evals/datasets/*.json`, plus `agents/*/evals/datasets/*.yaml` for multi-agent projects.
 
 ### Step 2: Load Configuration
 
-Read `evals/eval-config.yaml` for snapshot comparison mode, model selection, and run settings.
-
-Default config if file doesn't exist:
-
-```yaml
-snapshot:
-  compare_mode: structural
-  ignore_fields: [tool_call_id, timestamps, message_id]
-```
+Read `evals/eval-config.yaml` for snapshot comparison mode, model selection, and run settings. If the file doesn't exist, use the default snapshot settings in `${CLAUDE_PLUGIN_ROOT}/skills/evals/SKILL.md` § Snapshot Testing.
 
 ### Step 3: Run Scenarios
 
-Execute based on the mode (passed as command argument):
+Execute based on the mode passed by the command. Run the `pytest` command for that mode from `${CLAUDE_PLUGIN_ROOT}/skills/evals/SKILL.md` § Run Modes.
 
 When a scenario has a `history` field, pre-load these messages into the agent's conversation state before executing the `turns`:
 
@@ -62,24 +46,6 @@ if scenario.get("history"):
         )
 ```
 
-**Snapshot mode (default)**: Run scenarios with scripted turns. Compare trajectory against `evals/__snapshots__/`. No LLM judge needed.
-
-```bash
-pytest evals/ -v
-```
-
-**Smoke mode** (`--smoke`): Run only `@smoke`-tagged scenarios. Fast validation.
-
-```bash
-pytest evals/ -m smoke -v
-```
-
-**Full mode** (`--full`): Run all scenarios with Tier 2 simulated users + LLM judge. Pre-merge gate.
-
-```bash
-pytest evals/ --full --judge-model openai:o3-mini
-```
-
 ### Step 4: Compare Trajectories and Evaluate Assertions
 
 For each scenario, compare actual trajectory against stored snapshot:
@@ -87,60 +53,20 @@ For each scenario, compare actual trajectory against stored snapshot:
 1. Load snapshot from `evals/__snapshots__/{scenario_name}.json`
 2. If no snapshot exists: first run — save trajectory as new snapshot
 3. If snapshot exists: compare using configured `compare_mode`
-4. Evaluate `success_criteria` assertions:
-   - `judge_criteria`: Invoke LLM judge (model from `eval-config.yaml`) to evaluate whether the agent's response satisfies the semantic criteria. Use `temperature=0`.
-   - `response_contains`: Check for exact string matches in the final response
-   - `not_contains`: Check that exact forbidden terms are absent
-   - `security_judge_criteria`: Invoke LLM judge with security-focused prompt for semantic forbidden concept check
-   - `max_turns`, `no_tools`, `signal_task_complete`: Deterministic checks
+4. Evaluate each `success_criteria` assertion with the evaluator `${CLAUDE_PLUGIN_ROOT}/skills/evals/references/02-evaluators.md` defines for it, running LLM judges with the model from `eval-config.yaml` and `temperature=0`
 5. Classify result: **passed** (matches), **failed** (diverged), **changed** (different but ambiguous)
 
 ### Step 5: Write Results
 
-Save results to `evals/.results/latest.json`:
-
-```json
-{
-  "run_at": "2026-02-19T10:30:00Z",
-  "duration_seconds": 45,
-  "mode": "snapshot",
-  "agent_hash": "a1b2c3d4",
-  "total": 47,
-  "passed": 45,
-  "failed": 1,
-  "changed": 1,
-  "failures": [...],
-  "changes": [...],
-  "by_tag": {...}
-}
-```
-
-Move previous `latest.json` to `history/` (keep last 20 runs).
+Save results to `evals/.results/latest.json` in the shape `${CLAUDE_PLUGIN_ROOT}/skills/evals/references/03-dev-workflow.md` § Eval Results Persistence defines. Move the previous `latest.json` to `history/` (keep last 20 runs).
 
 ### Step 6: Report Results
 
-Display summary:
-
-```
-✓ 45 passed | ✗ 1 failed | ~ 1 changed
-
-FAILED: refund_after_shipping
-  Expected: [lookup_order, check_refund_policy, process_refund]
-  Actual:   [lookup_order, escalate_to_human]
-```
+Display the summary in the shape of Level 1 in `${CLAUDE_PLUGIN_ROOT}/skills/evals/references/03-dev-workflow.md` § Failure Investigation UX: counts of passed, failed, and changed, then one line per failure and per change.
 
 ### Step 7: Report Mode (`--report`)
 
-Show trajectory diffs for failures:
-
-```
-═══ refund_after_shipping ═══
-Turn 2: ✗ DIVERGED
-  Expected: check_refund_policy(order_id="1234")
-  Actual:   escalate_to_human(reason="amount exceeds threshold")
-Turn 3: ✗ MISSING
-  Expected: process_refund(order_id="1234", amount=49.99)
-```
+Show a trajectory diff for each failure, in the shape of Level 2 in `${CLAUDE_PLUGIN_ROOT}/skills/evals/references/03-dev-workflow.md` § Failure Investigation UX.
 
 ### Step 8: Diagnose Mode (`--diagnose`)
 
@@ -149,49 +75,37 @@ Analyze failures using LLM and suggest fixes:
 1. Collect the scenario definition, expected trajectory, and actual trajectory
 2. Read the agent's system prompt and tool definitions
 3. Send to LLM with analysis prompt
-4. Present diagnosis with root cause and suggested fixes
+4. Present the diagnosis with root cause and suggested fixes, in the shape of Level 3 in `${CLAUDE_PLUGIN_ROOT}/skills/evals/references/03-dev-workflow.md` § Failure Investigation UX
 
 ### Step 9: Update Mode (for `/eval-update`)
 
-Present changed snapshots for interactive review:
+Interactive review of snapshots that have changed since they were last accepted:
 
-1. Find snapshots where `agent_hash` doesn't match current agent
-2. For each changed snapshot:
-   - Show diff summary (what changed)
-   - Ask user: accept / reject / show full diff
-3. **Accept**: Overwrite snapshot with new trajectory
-4. **Reject**: Keep old snapshot (scenario shows as FAILED until agent is fixed)
-
-## Output Format
-
-### Result Summary
+1. Read all snapshot files in `evals/__snapshots__/*.json`
+2. Compute the current `agent_hash` (from agent prompt + tool names)
+3. Find snapshots where the stored `agent_hash` doesn't match the current hash, plus snapshots that failed due to trajectory changes in the last run (from `evals/.results/latest.json`)
+4. If there are none, report "All snapshots are current. Nothing to review." and stop
+5. For each changed snapshot, show the change and ask the user for a decision:
 
 ```
-✓ N passed | ✗ N failed | ~ N changed
-[failures with one-line reason]
-[changes with one-line diff]
+1/N: {scenario_name}
+  Change: {one-line description of what changed}
+  Accept this change? [yes / no / diff]
 ```
 
-### Diff Format
+   - **diff**: Show the full trajectory diff (old vs new), then ask again
+   - **yes (accept)**: Overwrite the snapshot with the new trajectory, set `agent_hash` to the current hash, and update `recorded_at`
+   - **no (reject)**: Keep the old snapshot unchanged; the scenario shows as FAILED until the agent is fixed
+
+6. After the last snapshot, report the summary:
 
 ```
-═══ {scenario_name} ═══
-Turn N: ✓ matched | ✗ DIVERGED | ✗ MISSING | + EXTRA
-  Expected: {tool_call}
-  Actual:   {tool_call}
-```
+Review complete:
+  Accepted: N snapshots updated
+  Rejected: N snapshots kept (scenarios will show as FAILED)
 
-### Diagnostic Format
-
-```
-═══ Diagnosis: {scenario_name} ═══
-Root cause: [explanation]
-Possible causes:
-  1. [cause]
-  2. [cause]
-Suggested fixes:
-  1. [fix]
-  2. [fix]
+Rejected scenarios will fail until the agent behavior matches the old snapshot.
+Run /eval to verify current state.
 ```
 
 ## Key Principles
@@ -201,5 +115,4 @@ Suggested fixes:
 - **No false positives**: Use `ignore_fields` to filter non-deterministic data
 - **Agent hash**: Track prompt + tool changes to detect stale snapshots
 - **Minimal cost**: Tier 1 is free. Only use LLM judge when explicitly requested
-- See [`references/02-evaluators.md`](../skills/evals/references/02-evaluators.md) for evaluator catalog
-- See [`references/03-dev-workflow.md`](../skills/evals/references/03-dev-workflow.md) for workflow details
+- Read `${CLAUDE_PLUGIN_ROOT}/skills/evals/references/02-evaluators.md` for the evaluator catalog and `${CLAUDE_PLUGIN_ROOT}/skills/evals/references/03-dev-workflow.md` for workflow details
