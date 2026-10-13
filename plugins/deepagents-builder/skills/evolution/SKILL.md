@@ -129,120 +129,13 @@ agent = create_deep_agent(
 3. Enable A/B testing of recipes
 4. Implement feedback loops
 
-## Assessment Checklist
+## Assessment
 
-Score 0-5 for each (total 80 possible):
-
-### Structure (20 points)
-- [ ] Topology fit (matches write coupling; subagents read-only and ~15x-justified)
-- [ ] Bounded contexts as skills
-- [ ] Business capability alignment
-- [ ] Explicit contracts
-
-### Operations (20 points)
-- [ ] Planning integration
-- [ ] Context management (summarization for long horizon)
-- [ ] Disclosure (tool search / progressive disclosure operating)
-- [ ] Error handling
-
-### Measurement (20 points)
-- [ ] Telemetry (cache, latency, tokens per episode)
-- [ ] Eval coverage (tool-selection, HITL, disclosure suites)
-- [ ] Documentation
-- [ ] Monitoring
-
-### Evolution (20 points)
-- [ ] Refactoring capability
-- [ ] Learning from usage
-- [ ] Experimentation
-- [ ] Feedback loops
-
-**Score interpretation:**
-- 0-20: Level 1 (Initial)
-- 21-40: Level 2 (Managed)
-- 41-60: Level 3 (Defined)
-- 61-80: Level 4+ (Measured/Optimizing)
-
-## Red Flags by Level
-
-### Level 1 Red Flags
-- Context constantly overflowing
-- Agent can't decide which tool
-- Simple tasks take > 5 minutes
-
-### Level 2 Red Flags
-- Skills exist but the full catalog still loads up front
-- Subagents created because the catalog grew
-- Still context overflow
-
-### Level 3 Red Flags
-- Business users don't recognize structure
-- Vocabulary conflicts
-- Subagents holding coupled writes
-
-### Level 4 Red Flags
-- Metrics not driving decisions
-- Performance not improving
-- Manual testing only
+Score the 16 items (0-5 each, max 80) with the anchored rubric in [Maturity Model](references/maturity-model.md) § Maturity Assessment, map the total to a level with the same section, and check the red flags for that level in § Red Flags by Level.
 
 ## Refactoring Patterns
 
-### Adopt Disclosure (first rung for large catalogs)
-
-When the catalog reaches 10+ tools without tool search/skills:
-
-```python
-# Before: 25 tools, all definitions loaded every turn
-agent = create_deep_agent(tools=[t1, ..., t25])
-
-# After: same single agent, disclosure added
-agent = create_deep_agent(
-    tools=[t1, ..., t25],
-    middleware=[LLMToolSelectorMiddleware()],  # or ProviderToolSearchMiddleware
-    skills=["./skills/"],
-)
-```
-
-### Extract Read-Only Worker
-
-Only when read-only parallelizable work remains after tool design + disclosure, and the episode value pays ~15x:
-
-```python
-# Before: frontal agent doing heavy research inline
-agent = create_deep_agent(tools=[*action_tools, web_search, read_docs])
-
-# After: read-only deep worker; writes stay in the frontal agent
-agent = create_deep_agent(
-    tools=action_tools,
-    subagents=[{"name": "research-worker", "tools": [web_search, read_docs]}]
-)
-```
-
-### Inline Subagent
-
-When a subagent isn't justified (used once, or fragments coupled writes):
-
-```python
-# Before: subagent holding a coupled write
-subagents=[{"name": "payment-executor", "tools": [execute_payment]}]
-
-# After: tool back in the frontal agent's thread
-tools=[execute_payment]
-```
-
-### Merge Subagents
-
-When workers are too granular:
-
-```python
-# Before: 10 tiny read-only workers
-subagents=[{"name": "a", "tools": [t1]}, ...]
-
-# After: consolidated workers
-subagents=[
-    {"name": "research-worker", "tools": [t1, t2, t3]},
-]
-```
+Pick the pattern that matches the problem (disclosure first, subagents last) and follow its before/after code and steps in [Refactoring Patterns](references/refactoring-patterns.md).
 
 ## Additional Resources
 
