@@ -34,19 +34,7 @@ Report findings to user:
 
 ### Step 2: Scaffold Directory (If First Run)
 
-If no `evals/` directory exists, create:
-
-```
-evals/
-  datasets/
-  __snapshots__/
-  conftest.py
-  eval-config.yaml
-```
-
-Generate `conftest.py` with the detected agent import. Generate default `eval-config.yaml`.
-
-For multi-agent projects, scaffold per-agent `evals/` directories.
+If no `evals/` directory exists, create the directory tree and `conftest.py` exactly as `${CLAUDE_PLUGIN_ROOT}/skills/evals/SKILL.md` § Local-First Storage and § Agent Discovery Convention lay them out, with the detected agent import. Write the default `eval-config.yaml` from the same file's § Snapshot Testing. For multi-agent projects, scaffold per-agent `evals/` directories following § Multi-Agent Directory Layout.
 
 ### Step 3: Trigger Eval Designer
 

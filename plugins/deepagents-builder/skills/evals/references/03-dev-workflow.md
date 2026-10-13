@@ -133,7 +133,7 @@ Full eval review is a manual gate before merging. It runs the entire dataset wit
 
 ```bash
 # Run full evaluation
-pytest evals/ --full --judge-model openai:o3-mini
+pytest evals/ --full --model openai:o3-mini
 
 # Compare against baseline
 pytest evals/ --full --compare baseline-v1.2
@@ -198,6 +198,8 @@ Turn 4: ✗ MISSING
   Expected: process_refund(order_id="1234", amount=49.99)
   Actual:   (no more tool calls)
 ```
+
+Each turn is marked `✓ matched`, `✗ DIVERGED`, `✗ MISSING`, or `+ EXTRA` (a tool call the snapshot does not have).
 
 ### Level 3: LLM Diagnostic (`/eval --diagnose`)
 
