@@ -1,6 +1,6 @@
 ---
 name: DeepAgents Quickstart
-description: This skill should be used when the user asks to "start a deepagent project", "create a new agent", "quickstart agent", "simple agent example", "get started with deepagents", or needs a quick introduction to building agents with LangChain's DeepAgents framework. Provides minimal setup and basic patterns for rapid prototyping.
+description: "Minimal working setup for a deepagents agent: install, first create_deep_agent call, chat loop. Use when building a first agent or prototyping quickly."
 ---
 
 # DeepAgents Quickstart

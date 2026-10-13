@@ -7,24 +7,7 @@ tools:
   - Glob
   - Grep
   - AskUserQuestion
-description: |
-  Runs eval scenarios against agents, manages snapshots, and analyzes failures. Use this agent
-  to execute evals, review changed snapshots, or diagnose test failures.
-
-  <example>
-  User: Run my evals
-  Action: Use eval-runner to load datasets and run scenarios against the agent
-  </example>
-
-  <example>
-  User: Why is my refund scenario failing?
-  Action: Use eval-runner to diagnose the failure with trajectory diff and suggestions
-  </example>
-
-  <example>
-  User: I changed the prompt, update my snapshots
-  Action: Use eval-runner to show changed snapshots for review and acceptance
-  </example>
+description: Runs eval scenarios against a deepagents agent, manages snapshots, and diagnoses failures. Use to run evals, review changed snapshots, or explain a failing scenario.
 ---
 
 # Eval Runner

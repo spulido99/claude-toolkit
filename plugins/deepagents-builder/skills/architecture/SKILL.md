@@ -1,6 +1,6 @@
 ---
 name: DeepAgents Architecture
-description: This skill should be used when the user asks to "design agent topology", "plan agent architecture", "create bounded contexts", "map business capabilities to agents", "organize subagents", or needs guidance on structuring agent systems. Topology is decided by write coupling — assistant pattern (single frontal agent) by default, subagents only for read-only parallelizable work.
+description: "Topology reference for deepagents agents: write coupling decides between one frontal agent (assistant pattern, the default) and read-only subagents; bounded contexts packaged as skills; business-capability mapping. Use when deciding how many agents to build, whether to add a subagent, or how to split domains."
 ---
 
 # DeepAgents Architecture Design

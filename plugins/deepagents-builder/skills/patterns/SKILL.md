@@ -1,6 +1,6 @@
 ---
 name: DeepAgents Patterns
-description: This skill should be used when the user asks about "agent prompts", "system prompt design", "tool patterns", "anti-patterns", "agent best practices", "subagent prompts", or needs guidance on implementing effective prompts, tools, and avoiding common mistakes in DeepAgents.
+description: "Implementation patterns for deepagents agents: the canonical create_deep_agent API, system prompts, tool and security patterns, and anti-patterns. Use when writing agent code or prompts, looking up the API, or checking for common mistakes."
 ---
 
 # DeepAgents Implementation Patterns

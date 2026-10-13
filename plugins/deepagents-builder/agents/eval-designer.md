@@ -6,24 +6,7 @@ tools:
   - Glob
   - Grep
   - AskUserQuestion
-description: |
-  Designs eval scenarios and datasets for deep agents. Use this agent when the user needs to
-  create eval datasets from JTBD, scaffold eval directory structure, or add scenarios.
-
-  <example>
-  User: I need to create evals for my customer support agent
-  Action: Use eval-designer to interview about JTBD and generate scenario YAML
-  </example>
-
-  <example>
-  User: Add a scenario for when the order is not found
-  Action: Use eval-designer to generate and add the scenario to existing dataset
-  </example>
-
-  <example>
-  User: I'm starting a new agent, help me define what to test
-  Action: Use eval-designer to guide JTBD definition before agent exists
-  </example>
+description: Designs eval scenarios for deepagents agents from jobs-to-be-done and scaffolds the evals directory. Use to start an eval suite, add scenarios, or define what to test before the agent exists.
 ---
 
 # Eval Designer
