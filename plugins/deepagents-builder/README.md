@@ -2,6 +2,8 @@
 
 Build production-ready AI agents with LangGraph. This plugin provides skills, agents, and commands for designing, implementing, testing, and evolving agent systems.
 
+The entry point is the `deepagents-builder:deepagents-builder` skill: it fires when you name the plugin or deepagents, and maps each task to the skill, command, or agent below. The guidance targets Python and LangChain's `deepagents`, and is runtime-agnostic (local, LangGraph Platform, AWS Bedrock AgentCore, or your own server).
+
 ## Day-to-Day Usage for AI Engineers
 
 The plugin follows an **Evals-Driven Development (EDD)** workflow: define what success looks like first, build to pass those evals, then iterate. Here's how a typical day looks:
@@ -83,6 +85,7 @@ As the agent grows, assess its architecture and evolve it:
 
 | Skill | Description | Key Commands |
 |-------|-------------|--------------|
+| **deepagents-builder** | Entry point: maps each task to the skill, command, or agent to load | — |
 | **quickstart** | Getting started with DeepAgents | `/new-sdk-app`, `/design-agent` |
 | **architecture** | Topology by write coupling (assistant pattern default), bounded contexts as skills | `/design-topology`, `/add-subagent` |
 | **patterns** | System prompts, tool design, anti-patterns | — |
@@ -141,6 +144,16 @@ As the agent grows, assess its architecture and evolve it:
 - `skills/evolution/references/maturity-model.md` — Complete 5-level maturity model
 - `skills/architecture/references/assistant-pattern.md` — The default topology (single frontal agent, tool search, skills)
 - `skills/evolution/references/refactoring-patterns.md` — 10 refactoring patterns (disclosure first)
+
+## Plugin Evals
+
+`evals/` checks that prompts phrased like real requests ("usa el skill de deepagents-builder…") load a plugin skill through the Skill tool. Disable the installed copy first so the run loads this folder, and re-enable it after:
+
+```
+claude plugin disable deepagents-builder@spuli-plugins
+claude plugin eval plugins/deepagents-builder --tag trigger --ablation none --no-publish
+claude plugin enable deepagents-builder@spuli-plugins
+```
 
 ## License
 
