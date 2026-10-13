@@ -1,0 +1,10 @@
+Voy a desplegar un agente deepagents en AgentCore. ¿Uso contenedor o zip, y L1 o L2 de CDK?
+Should my mobile app call the AgentCore runtime directly with the Cognito token, or go through a Lambda?
+Estoy desplegando mi agente Python en AgentCore como zip con CDK y el deploy falla con 'incompatible Python cache files'. ¿Qué hago?
+I updated my agent code and redeployed, but the AgentCore runtime keeps running the old version. Why?
+Mi agente en AgentCore tarda 10 segundos en cada mensaje aunque el modelo responde en uno. ¿Qué estoy haciendo mal con la sesión?
+I added a Cognito JWT authorizer to my AgentCore runtime and now every call returns 401 even with a valid access token — why?
+Mi agente en AgentCore tarda más de 29 segundos y API Gateway me devuelve 504, cómo hago para que siga trabajando y le muestre el progreso al usuario?
+My async AgentCore entrypoint returns {"status":"accepted"} but the Lambda calling it still waits ~27 s — why?
+Mis turnos del agente en AgentCore contestan bien pero la traza en CloudWatch sale vacía, ¿qué le falta al rol?
+How should my CI evals for a Bedrock AgentCore agent hit the deployed runtime, and how do I keep the LLM judge from making the gate flaky?

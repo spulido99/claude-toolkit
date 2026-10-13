@@ -14,7 +14,7 @@
 6. **Binary isProd branching** — Concrete `isProd` flag pattern for Lambda, log retention, and database configuration; when a second tier is justified.
 7. **Rollback** — Basic rollback via deploy tags and `git checkout`; pre-conditions, schema caveats, and snapshot discipline.
 8. **Windows / PowerShell note** — AWS CLI pager hang in Git Bash and how to suppress it.
-9. **Gotchas catalog** — Seven common failure modes with root cause and fix.
+9. **Gotchas catalog** — Eight common failure modes with root cause and fix.
 10. **Further reading** — CDK CLI docs, context docs, CodeDeploy reference, and sibling files.
 
 ## Section 1: Pre-deploy checklist (mandatory)
@@ -318,6 +318,7 @@ Add `export AWS_PAGER=""` to `.bashrc` or `.bash_profile` to disable the pager p
 | `BucketDeployment` fails with "Cannot find asset" | Frontend `dist/` is absent or empty when `cdk deploy` runs synth; the asset bundler cannot locate the source directory | Build the frontend (`npm run build`) before running `cdk deploy --all` |
 | First deploy succeeds but auth and CORS are broken | The CloudFront domain is not yet in `cdk.json` context; Cognito callbacks and API Gateway CORS rules were configured without it | Follow Section 5: register the domain in `cdk.json` and redeploy |
 | `aws` CLI command hangs in Git Bash on Windows | The AWS CLI pager waits for TTY input that Git Bash does not provide | Set `export AWS_PAGER=""` or use PowerShell; see Section 8 |
+| GitHub Actions fails with `Not authorized to perform sts:AssumeRoleWithWebIdentity` on a newly created repository, while the same trust policy works for older ones | The role's trust policy matches `sub` against `repo:<org>/<repo>:…`, but GitHub issued the newer repository's token with numeric ids in the claim: `repo:<org>@<org-id>/<repo>@<repo-id>:ref:refs/heads/<branch>` (observed 2026-10) | Match the `sub` exactly as GitHub sends it for that repository, ids included, in the `StringLike` condition; keep the branch pattern after `:ref:` |
 | `git checkout <tag>` then `cdk deploy` triggers Aurora replacement | Schema drift between commits; the older CDK code defines a different Aurora configuration than what is currently deployed | Plan schema rollback as a separate migration; do not attempt to roll back database schema by redeploying older CDK code |
 
 ## Section 10: Further reading
