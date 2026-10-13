@@ -58,86 +58,7 @@ Large tool catalogs (10+ tools or >10k tokens of definitions) are handled with *
 
 ## Agent-Native Principles
 
-Design applications where agents are first-class citizens, not add-ons.
-
-### 1. Parity
-
-Whatever users can do through the UI, agents should achieve through tools.
-
-```python
-# ❌ BAD: UI has features agent cannot access
-ui_features = ["bulk_delete", "export_csv", "advanced_filters"]
-agent_tools = [delete_single_item]  # Missing capabilities
-
-# ✅ GOOD: Full parity
-agent_tools = [delete_items, export_data, search_with_filters]
-```
-
-### 2. Granularity
-
-Tools should be atomic primitives. Features emerge from agents composing tools in loops—not bundled workflows.
-
-```python
-# ❌ BAD: Workflow bundled into single tool
-@tool
-def handle_order(order_id: str) -> str:
-    """Validates, processes payment, ships, and emails."""
-    # Agent can't customize or retry individual steps
-
-# ✅ GOOD: Atomic primitives
-tools = [validate_order, process_payment, create_shipment, send_notification]
-# Agent composes and handles failures at each step
-```
-
-### 3. Composability
-
-With atomic tools and parity, create new features by writing prompts—no code changes needed.
-
-```python
-# New "rush order" feature = prompt change, not code
-system_prompt = """For rush orders:
-1. validate_order with priority=high
-2. process_payment immediately
-3. create_shipment with express=True
-4. send_notification with urgency=high"""
-```
-
-### 4. Emergent Capability
-
-Agents accomplish unanticipated tasks by composing tools creatively. Design for discovery, not restriction.
-
-```python
-# User asks: "Send weekly stakeholder updates every Friday"
-# Agent CREATIVELY composes tools not originally designed for this:
-tools = [query_db, aggregate_metrics, generate_summary, send_email]
-
-# Agent figures out a workflow:
-# 1. Query project metrics from database
-# 2. Aggregate into weekly summary
-# 3. Generate human-readable report
-# 4. Email to stakeholder list
-# No "create_weekly_report" tool needed—agent composes existing tools!
-```
-
-### 5. Improvement Over Time
-
-Applications enhance through accumulated context (`AGENTS.md`) and prompt refinement—not code rewrites.
-
-```markdown
-# Example: Agent learns from user feedback
-
-## Before feedback
-Agent generates text-only reports.
-
-## User feedback
-"Include chart images in reports"
-
-## Agent updates AGENTS.md:
-### Learned Preferences
-- Reports should include visual charts
-- Use generate_chart tool before send_email
-- Chart style: bar charts for comparisons, line charts for trends
-```
+Design applications where agents are first-class citizens, not add-ons. Read [Agent-Native Principles](${CLAUDE_PLUGIN_ROOT}/skills/tool-design/references/agent-native-principles.md) § Catalog-Level Principles (Parity, Granularity, Composability, Emergent Capability, Improvement Over Time) when auditing whether the agent can do everything the UI can and whether tools are sized as atomic primitives, and apply its guidance to the catalog.
 
 ## Data Architecture
 
@@ -215,7 +136,7 @@ agent = create_deep_agent(
 
 **For internal/trusted agents only:** The agent can update these files using `edit_file` when learning new preferences or receiving feedback. By default, treat `AGENTS.md` as read-only.
 
-> **Security Note**: Writable `AGENTS.md` is appropriate for internal/trusted agents only. For customer-facing agents, see the [Security for Customer-Facing Agents](../patterns/SKILL.md#security-for-customer-facing-agents) section in patterns/SKILL.md to prevent Persistent Prompt Injection attacks.
+> **Security Note**: Writable `AGENTS.md` is appropriate for internal/trusted agents only. For customer-facing agents, see the [Security for Customer-Facing Agents](${CLAUDE_PLUGIN_ROOT}/skills/patterns/SKILL.md#security-for-customer-facing-agents) section in patterns/SKILL.md to prevent Persistent Prompt Injection attacks.
 
 ### Long-Term Memory with CompositeBackend
 
@@ -286,7 +207,9 @@ An autonomous, read-heavy, parallelizable episode dispatched in background from 
 
 > Subagents are stateless in messages but **share the filesystem/backend with the parent** — delegation isolates the message context, not the files.
 
-## Topology Selection
+## Topology Decision
+
+Ask these questions in this order. Write coupling decides the topology; tool count and the interaction regime never do. First have the user describe the **episodes** — units of work between human input and result (a conversational turn, or a full autonomous run).
 
 ```
 Start: describe the episodes
@@ -312,6 +235,14 @@ Start: describe the episodes
    --> configures the recipe (interrupts, summarization, deep workers)
        — never decides the topology
 ```
+
+**Question 1 — Are the episode's writes coupled?** Do the writes (transactions, file edits, state changes, messages sent) depend on decisions made in the same thread? If yes, use the assistant pattern: a single frontal agent owns the conversation and every write; long horizon is handled with summarization/context compression, not by splitting the agent, and deep workers may still be composed for read-heavy sub-episodes. If no, the delegable work is read-only and parallelizable: continue to Question 2.
+
+**Question 2 — Does the episode value pay the ~15x overhead?** Multi-agent systems cost ~15x the tokens of a single agent (Anthropic). If each episode is valuable enough (broad research, large-scale analysis) to pay that, use read-only fan-out: parallel read-only subagents, writes concentrated in the lead agent. If not, stay with the assistant pattern.
+
+**Question 3 — How large is the tool catalog?** Estimate the number of tools and the size of their definitions. If the catalog has overlap or ambiguous names, do tool design first (consolidate/rename). If it reaches 10+ tools or >10k tokens of definitions, use tool search / deferred loading in the single agent (in deepagents 0.6, compose via `middleware=` with `ProviderToolSearchMiddleware` or `LLMToolSelectorMiddleware`; keep built-ins non-deferred). Never split into subagents because of catalog size.
+
+**Question 4 — What is the interaction regime?** Conversational (constant HITL, short turns) or autonomous (long episodes without HITL). The regime is descriptive: it configures the recipe (see Step 4 of the Design Process), never the topology decided by Question 1.
 
 ### Additional Decision Factors
 
@@ -429,8 +360,13 @@ agent = create_deep_agent(
 Before finalizing architecture:
 
 - [ ] Topology matches write coupling (coupled writes → single frontal agent; subagents only for read-only parallelizable work that pays ~15x)
-- [ ] 10+ tools (or >10k tokens of definitions) → tool search / deferred loading in place
-- [ ] Bounded contexts packaged as skills (assistant branch), distinct vocabularies per context
+- [ ] All write-capable tools live in a single agent (no fragmented coupled writes)
+- [ ] No subagent exists merely because the catalog grew; 10+ tools (or >10k tokens of definitions) → tool search / deferred loading in place
+- [ ] Every subagent is read-only, parallelizable, and passes the ~15x test
+- [ ] Bounded contexts packaged as skills (assistant branch), distinct vocabularies per context, no vocabulary collisions
+- [ ] Long horizon addressed with summarization, not agent splitting
+- [ ] Interaction regime only configured the recipe (interrupts/summarization/workers)
+- [ ] No anti-patterns (God Agent = large catalog without disclosure or name/description overlap, Unclear Boundaries, Premature Decomposition)
 - [ ] Business capability alignment
 - [ ] Stakeholders recognize the structure
 - [ ] New subagent description tested for routing ambiguity against all existing descriptions
@@ -444,11 +380,11 @@ For detailed patterns and implementation guidance:
 
 - **[Assistant Pattern](references/assistant-pattern.md)** - The default topology: single frontal agent, tool search, skills, deep workers
 - **[Topology Patterns](references/topology-patterns.md)** - All topology patterns with the write-coupling flowchart
-- **[Patterns](../patterns/SKILL.md)** - Implementation patterns for prompts, tools, and security
-- **[Anti-Patterns](../patterns/references/anti-patterns.md)** - 16 anti-patterns with fixes
-- **[Quickstart](../quickstart/SKILL.md)** - Quick start guide with code examples
-- **[Evolution](../evolution/SKILL.md)** - Maturity model and refactoring strategies
-- **[Evals](../evals/SKILL.md)** - Evals-Driven Development — validate bounded contexts, measure token efficiency, hierarchical multi-agent evaluation
+- **[Patterns](${CLAUDE_PLUGIN_ROOT}/skills/patterns/SKILL.md)** - Implementation patterns for prompts, tools, and security
+- **[Anti-Patterns](${CLAUDE_PLUGIN_ROOT}/skills/patterns/references/anti-patterns.md)** - anti-patterns with fixes
+- **[Quickstart](${CLAUDE_PLUGIN_ROOT}/skills/quickstart/SKILL.md)** - Quick start guide with code examples
+- **[Evolution](${CLAUDE_PLUGIN_ROOT}/skills/evolution/SKILL.md)** - Maturity model and refactoring strategies
+- **[Evals](${CLAUDE_PLUGIN_ROOT}/skills/evals/SKILL.md)** - Evals-Driven Development — validate bounded contexts, measure token efficiency, hierarchical multi-agent evaluation
 
 ### Commands
 

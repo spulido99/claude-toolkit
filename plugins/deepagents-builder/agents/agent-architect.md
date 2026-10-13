@@ -32,12 +32,7 @@ Gather information about:
 
 ### Step 2: Assess Write Coupling (first bifurcation)
 
-Ask in this order (never decide topology by tool count or by interaction regime):
-
-1. **Are the episode's writes coupled?** If writes depend on decisions made in the same thread → **assistant pattern**: a single frontal agent owns every write. Long horizon → summarization, not splitting.
-2. **Is the delegable work read-only and parallelizable, and does the episode value pay the ~15x multi-agent token overhead?** Only then → read-only fan-out (workers never write).
-3. **Catalog at 10+ tools or >10k tokens of definitions?** → tool design (consolidate/rename), then tool search / deferred loading in the single agent.
-4. **Interaction regime** (conversational vs autonomous) → configures the recipe (interrupts, summarization, background deep workers); it never decides topology.
+Read the decision questions in `${CLAUDE_PLUGIN_ROOT}/skills/architecture/SKILL.md` § Topology Decision and ask the user each one in order, using the answers to choose the branch.
 
 ### Step 3: Map Capabilities
 
@@ -49,37 +44,7 @@ Decompose into business capabilities:
 
 ### Step 4: Design Topology
 
-Recommend appropriate pattern:
-
-**Assistant Pattern (default — coupled writes)**
-```python
-agent = create_deep_agent(
-    tools=all_tools,                          # flat catalog, writes stay here
-    middleware=[LLMToolSelectorMiddleware()], # tool search for 10+ tools
-    skills=["./skills/"],                     # bounded contexts as skills
-    interrupt_on={...},
-    checkpointer=MemorySaver(),
-)
-```
-
-**Read-Only Fan-Out (parallelizable reads, ~15x justified)**
-```python
-agent = create_deep_agent(
-    tools=[synthesize, write_report],  # writes stay in the lead agent
-    subagents=[
-        {"name": "market-researcher", "tools": [...]},   # read-only
-        {"name": "literature-researcher", "tools": [...]}  # read-only
-    ]
-)
-```
-
-**Hybrid (composition of the two, not a third regime)**
-```python
-agent = create_deep_agent(
-    tools=write_and_action_tools,
-    subagents=[{"name": "research-worker", "tools": read_only_tools}]
-)
-```
+Recommend the pattern that matches the user's answers, choosing among the patterns in `${CLAUDE_PLUGIN_ROOT}/skills/architecture/SKILL.md` § Agent Topologies and using the code skeletons in § Quick Patterns as the base for the Code Skeleton output.
 
 ### Step 5: Define Components
 
@@ -94,18 +59,11 @@ agent = create_deep_agent(
 
 ### Step 6: Configure the Recipe from the Regime
 
-The interaction regime is descriptive — it configures, never decides:
-- Conversational → interrupts on sensitive tools, deep workers dispatched in background
-- Autonomous → heavier summarization/context compression; still single-agent if writes are coupled
+Apply the regime-to-recipe mapping in `${CLAUDE_PLUGIN_ROOT}/skills/architecture/SKILL.md` § Design Process, Step 4 (Configure the Recipe from the Interaction Regime) to the user's regime answer.
 
 ### Step 7: Validate Design
 
-Check for anti-patterns:
-- [ ] No God Agent (10+ tools without tool search/skills, or name/description overlap)
-- [ ] Topology matches write coupling; every subagent is read-only and pays the ~15x test
-- [ ] Clear subagent boundaries
-- [ ] No vocabulary collisions
-- [ ] No premature decomposition
+Check the design against `${CLAUDE_PLUGIN_ROOT}/skills/architecture/SKILL.md` § Validation Checklist and report each item as pass or fail with the fix for each failure.
 
 ## Output Format
 
@@ -139,7 +97,7 @@ Receive the parsed architecture profile from the command (do not re-read files).
 
 ### Step 8.1b: Write-Coupling Guard
 
-Before designing, verify the new capability belongs in a subagent at all: the delegated work must be **read-only and parallelizable**, and its episode value must pay the ~15x multi-agent token overhead. If the capability writes in a thread coupled with the frontal agent's decisions, keep it as tools on the frontal agent (with tool search if the catalog is large) or package the domain as a skill — and say so instead of designing a subagent.
+Before designing, apply Questions 1 and 2 of `${CLAUDE_PLUGIN_ROOT}/skills/architecture/SKILL.md` § Topology Decision to the new capability, answering them yourself from the architecture profile and asking the user only what the profile does not show. If the capability passes (read-only, parallelizable, episode value pays the ~15x overhead), continue to Step 8.2. If it fails, do not design a subagent: say so and recommend keeping it as tools on the frontal agent (with tool search if the catalog is large) or packaging the domain as a skill.
 
 ### Step 8.2: Design Subagent Dict
 

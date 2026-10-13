@@ -1,6 +1,6 @@
 # Agent-Native Architecture Principles
 
-Architecture patterns for designing systems where AI agents are first-class consumers. This is the **canonical reference** for Principles 6–11 of the AI-Friendly Tool Design skill, plus three catalog-level principles (Granularity, Bounded Contexts, Parity). The skill's `SKILL.md` is an index; when the two disagree, this file wins.
+Architecture patterns for designing systems where AI agents are first-class consumers. This is the **canonical reference** for Principles 6–11 of the AI-Friendly Tool Design skill, plus the catalog-level principles (Granularity, Bounded Contexts, Parity, Composability, Emergent Capability, Improvement Over Time). The skill's `SKILL.md` is an index; when the two disagree, this file wins.
 
 ---
 
@@ -429,7 +429,7 @@ domains/
 Rules:
 
 - **~10 tools per domain (suggested default)**: if a domain grows well past this, split it into sub-domains
-- **~15+ tools in one agent**: consider domain subagents instead of one flat catalog (see the `architecture` skill for token-economy trade-offs)
+- **10+ tools or >10k tokens of definitions in one agent**: keep the catalog on the frontal agent and add tool search / deferred loading; package each domain's vocabulary as a skill. Catalog size never justifies a subagent (see the `architecture` skill's assistant pattern)
 - **Each domain exports a `TOOLS` list**: `TOOLS = [tool1, tool2, ...]`
 - **Shared types go in a common `schemas.py`**: Money, Page, PaginatedRequest, etc.
 - **Domain-specific vocabulary**: each domain can define terms specific to its context
@@ -438,16 +438,15 @@ Rules:
 ```python
 from domains.accounts.tools import TOOLS as accounts_tools
 from domains.transfers.tools import TOOLS as transfers_tools
+from deepagents import create_deep_agent
+from langchain.agents.middleware import LLMToolSelectorMiddleware
 
-# Flat registration (all tools available to one agent)
-agent = create_agent(tools=accounts_tools + transfers_tools)
-
-# Or domain-isolated sub-agents (15+ tools)
-agent = create_agent(
-    subagents=[
-        {"name": "accounts", "tools": accounts_tools},
-        {"name": "transfers", "tools": transfers_tools},
-    ]
+# One frontal agent holds every domain's tools; tool search keeps the
+# definitions out of context until needed (10+ tools or >10k tokens)
+agent = create_deep_agent(
+    tools=accounts_tools + transfers_tools,
+    middleware=[LLMToolSelectorMiddleware(max_tools=8)],  # or ProviderToolSearchMiddleware()
+    skills=["./skills/"],  # one SKILL.md per domain
 )
 ```
 
@@ -483,3 +482,53 @@ Acceptable gaps — some actions are intentionally excluded from agent access:
 - **Identity verification**: KYC/AML processes (regulatory requirement)
 
 Document these exclusions explicitly so they don't appear as oversights.
+
+### Composability
+
+With atomic tools and parity, create new features by writing prompts — no code changes needed.
+
+```python
+# New "rush order" feature = prompt change, not code
+system_prompt = """For rush orders:
+1. validate_order with priority=high
+2. process_payment immediately
+3. create_shipment with express=True
+4. send_notification with urgency=high"""
+```
+
+### Emergent Capability
+
+Agents accomplish unanticipated tasks by composing tools creatively. Design for discovery, not restriction.
+
+```python
+# User asks: "Send weekly stakeholder updates every Friday"
+# Agent CREATIVELY composes tools not originally designed for this:
+tools = [query_db, aggregate_metrics, generate_summary, send_email]
+
+# Agent figures out a workflow:
+# 1. Query project metrics from database
+# 2. Aggregate into weekly summary
+# 3. Generate human-readable report
+# 4. Email to stakeholder list
+# No "create_weekly_report" tool needed — agent composes existing tools!
+```
+
+### Improvement Over Time
+
+Applications enhance through accumulated context (`AGENTS.md`) and prompt refinement — not code rewrites.
+
+```markdown
+# Example: Agent learns from user feedback
+
+## Before feedback
+Agent generates text-only reports.
+
+## User feedback
+"Include chart images in reports"
+
+## Agent updates AGENTS.md:
+### Learned Preferences
+- Reports should include visual charts
+- Use generate_chart tool before send_email
+- Chart style: bar charts for comparisons, line charts for trends
+```

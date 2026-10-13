@@ -48,7 +48,7 @@ Parse the existing agent configuration:
 4. Extract prompt style (section headings used in existing system_prompts)
 5. Note each subagent's tool list and whether any tool is write-capable
 
-Before proceeding, apply the **write-coupling guard** (agent-architect Step 8.1b): the new capability must be read-only, parallelizable work whose episode value pays the ~15x token overhead. If it writes in a thread coupled with the main agent's decisions, recommend keeping it as tools on the main agent (with tool search if the catalog is 10+) or packaging the domain as a skill instead.
+Before proceeding, run the **write-coupling guard** (`agent-architect` Step 8.1b), which applies Questions 1 and 2 of `${CLAUDE_PLUGIN_ROOT}/skills/architecture/SKILL.md` § Topology Decision to the new capability. If the capability fails the guard, tell the user and recommend the alternative the guard names instead of designing a subagent.
 
 Report summary to user:
 ```
