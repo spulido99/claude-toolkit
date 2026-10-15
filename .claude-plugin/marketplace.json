@@ -39,8 +39,8 @@
     {
       "name": "dev-patterns",
       "source": "./plugins/dev-patterns",
-      "description": "Cross-cutting development patterns and gotchas for common tech stacks: AWS CDK, DynamoDB design, Expo / React Native, and agents on Amazon Bedrock AgentCore.",
-      "version": "1.1.0",
+      "description": "Cross-cutting development patterns and gotchas for common tech stacks: AWS CDK, DynamoDB design, Expo / React Native, agents on Amazon Bedrock AgentCore, and end-to-end tests with Playwright.",
+      "version": "1.2.0",
       "author": {
         "name": "spuli"
       }
