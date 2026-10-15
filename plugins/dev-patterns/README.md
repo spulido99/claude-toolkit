@@ -130,6 +130,45 @@ Patterns for running a Python agent (LangGraph or deepagents) on Amazon Bedrock 
 
 Every mechanical rule ships with a check (pytest, jest, or shell). Test with the harness in `plugins/dev-patterns/skills/bedrock-agentcore/scripts/`.
 
+### `e2e-testing`
+
+Patterns for end-to-end tests written with Playwright for a web app or PWA (including an Expo web export) that runs on an AWS serverless stack, with the tests run from GitHub Actions. They come from the code and the incident history of three production projects. Most of those incidents were false greens: test runs that passed without testing what they claimed. Two examples: a suite that ran against an old environment because its URL had a default value, and test scripts that called `test.skip()` when a credential was missing, which marks those tests as skipped and does not fail the run. Two other skills in this plugin cover neighbouring topics. `expo-react-native` covers tests of native mobile apps on a device or simulator; this skill covers an Expo web export only when it runs in a browser. `bedrock-agentcore` measures whether an AI agent's answers are good; this skill only checks that the app shows an answer with the expected shape.
+
+**Decision tree** (in `SKILL.md`) routes by task:
+
+| Task | Reference file |
+|------|----------------|
+| Starting a suite: which tests run where, which environments, how CI runs them, how many retries | `00-lanes-and-decisions.md` |
+| Playwright config for each kind of suite: the URL the tests run against, the local web server, the Playwright projects that call paid services only when an environment variable turns them on | `01-config-lanes-and-target.md` |
+| Playwright settings: parallel workers, timeouts, reports, browser and device, type-checking the test folder, pinning the Playwright version | `02-config-runtime.md` |
+| Logging test users into Cognito without the login screen, and managing those users | `03-auth-and-test-users.md` |
+| Creating and cleaning test data on a deployed stack | `04-test-data.md` |
+| Several users in one test, waiting for the backend, dates and time | `05-multi-user-waits-and-time.md` |
+| GitHub Actions: running the tests right after a deploy, AWS roles, triggers, concurrency, artifacts | `06-ci-workflows.md` |
+| Blocking a production deploy until the exact commit passed its end-to-end tests in staging | `07-release-gate.md` |
+| Payments, WhatsApp/SMS, other third-party services, and keeping paid calls out of the normal runs | `08-third-parties-payments-and-messaging.md` |
+| LLM and AI agent answers | `09-llm-and-agent-flows.md` |
+| Unit tests that check the test setup itself | `10-guard-tests.md` |
+| Spec files that skip themselves, and screenshots per step (the skill calls them step photos) | `11-skipped-scripts-and-photos.md` |
+| Proving a fix: a flaky test, a screen that changed, an assertion that could never fail | `12-proving-a-fix.md` |
+| Diagnosing a red, flaky, or suspiciously green run | `13-gotchas.md` |
+
+**Key topics covered:**
+
+- The skill separates three kinds of test suite, which it calls lanes: the local lane, the smoke lane (the tests that run against the stack deployed to AWS), and one probe lane per paid or unpredictable service. The local lane runs against the built app served on localhost, with fake backend services that store what the app writes, so a test that creates an order and then lists orders sees it; a fake that always returns the same canned answer would pass even when the write is broken. The smoke lane runs against the stack after it is deployed to AWS. A probe lane calls a service that costs money or answers differently each time (an LLM, a real payment); they run only when a workflow sets an environment variable that turns them on (for example `E2E_AI=1`), never on a plain test run.
+- Where the smoke lane runs in CI, with three options that all ran in production. First, on every push to a developer's branch, the workflow that deploys that developer's stack runs the tests against it right after the deploy, so a red run means the commit just deployed is broken. Second, a workflow after each merge tests a shared test stack without blocking anything, which keeps merges fast but lets a regression sit on the main branch until someone looks. Third, in a project with a staging environment (the last one before production), the tests run inside the staging deploy, where a failing suite marks that deploy as failed (the deploy is not rolled back, so staging keeps the new code), and the production deploy refuses any commit that did not pass in staging.
+- The URL the tests run against comes from the deploy outputs, and the run stops if it is missing, because a default URL once let a suite pass against the wrong environment.
+- Playwright settings, each with the incident that motivated it. For example, the browser runs in the UTC time zone because a suite seeded dates in UTC and failed on a laptop every evening; the tests turn off the PWA's service worker with a Playwright setting, because it caches files and kept serving the previous deploy's version; and the test folder is type-checked because Playwright runs TypeScript without checking types, so a wrong argument only showed up as a 401 in the deployed run.
+- Logging test users into Cognito without going through the login screen. The app signs users in with Google through Cognito, and Google blocks automated logins. So the tests sign in through a separate Cognito app client, created only for tests, that accepts a username and password, and that client exists only outside production. A unit test of the CDK code fails if the production stack ever gets that client, because in production users must sign in only with Google.
+- Test data that each run creates and removes by itself, with ids unique per run so two runs never collide, a separate browser context (separate cookies and storage) for each simulated person, and repeated checks instead of fixed sleeps while the backend catches up.
+- GitHub Actions setup: tests run with an AWS role that can read test data but cannot deploy, so a bug in a test cannot change the infrastructure, two runs never test the same stack at once, screenshots are kept when a run fails, and a failing scheduled check opens one GitHub issue that closes itself on the next passing run.
+- A release gate. After the staging tests run, the staging pipeline writes a small file to a private S3 bucket saying whether that commit passed or failed. The production pipeline reads that file and refuses to deploy a commit without a pass. Only the staging pipeline's AWS role can write that file, and the production pipeline's role can only read it, so a production deploy cannot create a passing file for a commit that never passed.
+- LLM answers checked by structure instead of exact wording: the answer arrives, has the expected fields, and the app's error message is absent. Real payments and real messages never run on every merge. Events that almost never happen on their own are triggered on purpose. For example, to test what happens when a request to the AI assistant runs past the backend's time limit, the project adds a switch to its backend that exists only in the dev environment: a fixed phrase that makes the backend wait until the limit. The test sends that phrase, then checks that the app warns the user that the answer is slow, that the backend logs the timeout, and that the CloudWatch alarm for timed-out requests goes off.
+- Unit tests that check the test setup itself: that the workflows keep their safety settings, that the Playwright config keeps its settings (for example the number of parallel workers, and zero retries outside CI), and that the instructions written for AI coding agents (for example `docs/agents/e2e.md` or `CLAUDE.md`) do not contain a rule that CI no longer follows; the unit test reads those files and fails on the outdated wording. A spec file that skips itself does not fail the run (the `test.skip()` case above). To catch it, each spec file saves its screenshots in its own folder, which proves the file ran, and a CI step fails the run when a folder that should exist is missing.
+- A catalog of known problems, each with symptom, cause, and fix.
+
+Each mechanical rule in the skill comes with the check that enforces it (a unit test, an assertion in the test setup, or a CI step) as example code for you to copy into your project. Complete files to copy, such as the workflow that deploys a developer's stack and runs the tests, the production deploy workflow, and the script that refuses a production deploy without a passing staging run, are in `assets/`, and each reference says when to open them. To check that Claude finds this skill for the right questions, run the harness in `plugins/dev-patterns/skills/e2e-testing/scripts/`, which asks Claude the questions in `tests/scenarios.txt` with and without the skill installed (see "Testing the skills" below).
+
 ## Installation
 
 This plugin is part of the `claude-skills` marketplace. Install via Claude Code plugin marketplace or clone the repo and point Claude Code at the plugin directory.
@@ -184,6 +223,18 @@ Each skill ships with its own RED/GREEN test harness. Pick the variant for your 
 
 ```bash
 ./plugins/dev-patterns/skills/bedrock-agentcore/scripts/test-skill.sh
+```
+
+**`e2e-testing` — Windows (PowerShell 7+):**
+
+```powershell
+.\plugins\dev-patterns\skills\e2e-testing\scripts\test-skill.ps1
+```
+
+**`e2e-testing` — Mac / Linux / Git Bash:**
+
+```bash
+./plugins/dev-patterns/skills/e2e-testing/scripts/test-skill.sh
 ```
 
 All variants run the same two phases for every scenario in the matching `tests/scenarios.txt`:

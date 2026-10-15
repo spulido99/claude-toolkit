@@ -367,7 +367,7 @@ In CI, nothing of the agent runs on the runner. A copy started on the runner mea
 
 Enter the way real callers do. For a runtime behind a JWT authorizer, get a token the way the app gets one (for example, the endpoint that creates a provisional user), then call the runtime with it; one new user per scenario keeps scenarios from sharing a thread when the thread derives from the token's `sub`. For a runtime behind IAM, sign with the CI role, which needs `bedrock-agentcore:InvokeAgentRuntime`. Calling the runtime is covered in [`02-invocation-and-sessions.md`](./02-invocation-and-sessions.md).
 
-Read the runtime ARN and the auth endpoint from the deploy outputs (`cdk-outputs.json`) and fail the step with a clear message when either is missing. Read the judge model id from the same config file the stack uses, not from a literal in the workflow.
+Read the runtime ARN and the auth endpoint from the deploy outputs (`infra/cdk-outputs-backend.json`, which the deploy workflow of the e2e-testing skill writes with `cdk deploy --outputs-file`) and fail the step with a clear message when either is missing. Read the judge model id from the same config file the stack uses, not from a literal in the workflow.
 
 ### 6.3 Two kinds of judge
 
@@ -413,7 +413,7 @@ Give latency gates no retries. A retry turned a 504 into "flaky" and let the com
 - **Check that unauthenticated requests are rejected.** Send one request without credentials and assert a 4xx (401 from an API Gateway authorizer, a 4xx from the runtime). It proves the authorizer is wired.
 - **Read the ARN from what you shipped.** When the client bundle carries the runtime ARN, the smoke test extracts it from the deployed bundle (`/arn:aws:bedrock-agentcore:[a-z0-9-]+:\d+:runtime\/[A-Za-z0-9_-]+/`) instead of from config. That also proves the build baked it in.
 - **Exercise the timeout path.** A dev-only probe (an exact phrase the process recognises when a dev-only variable is set, never a tool the model could choose) forces a turn past its deadline, so the smoke test proves the timed-out event and the alarm. Staging and production never receive the variable.
-- **Archive the verdict per commit.** Write `passed` or `failed` to `s3://<bucket>/e2e-reports/<sha>/ai-status.json` and make the production deploy refuse a commit without `passed`. A missing file means "never ran", which is different from "ran and failed".
+- **Archive the verdict per commit.** Write `passed` or `failed` to `s3://<bucket>/e2e-reports/<sha>/ai-status.json` and make the production deploy refuse a commit without `passed`. A missing file means "never ran", which is different from "ran and failed". The bucket, the write and read roles, and the gate script are in [`e2e-testing/references/07-release-gate.md`](../../e2e-testing/references/07-release-gate.md).
 - **One alert, many failures.** A failing probe that does not block staging opens or updates a single labelled issue and comments on it; a green run closes it.
 
 ---

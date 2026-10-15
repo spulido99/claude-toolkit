@@ -1,0 +1,93 @@
+# Pin each action by its full commit SHA before use; the guard test in e2e-testing references/10-guard-tests.md, section 1.2 fails on tags.
+# .github/workflows/deploy-prod.yml
+name: Deploy Prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to deploy (must already be merged to main)
+        required: true
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  assert-on-main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          fetch-depth: 0
+      - id: resolve
+        run: |
+          SHA=$(git rev-parse HEAD)
+          git fetch --force origin main
+          git merge-base --is-ancestor "$SHA" origin/main || {
+            echo "::error::Only deploy tags already merged to main."
+            exit 1
+          }
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+  verify:
+    needs: assert-on-main
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.assert-on-main.outputs.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Tags skip the pull request checks, so run the normal test command on the tagged commit.
+      # The same command runs the gate's unit tests and the IAM template tests.
+      - run: npm run typecheck
+      - run: npm test
+
+  e2e-gate:
+    # Assume the AWS role only for a tag that is already on main.
+    needs: assert-on-main
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: prod # needed for the OIDC subject claim, not for reviewers
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.assert-on-main.outputs.sha }}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_PROD }}
+          aws-region: us-east-1
+      - name: Require a green staging verdict for this exact commit
+        env:
+          E2E_REPORTS_BUCKET: ${{ vars.E2E_REPORTS_BUCKET }}
+          SHA: ${{ needs.assert-on-main.outputs.sha }}
+        run: node scripts/e2e-gate.mjs "$SHA"
+
+  deploy:
+    needs: [assert-on-main, verify, e2e-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: prod
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.assert-on-main.outputs.sha }}
+      # ...assume the prod role, cdk deploy, post-deploy read-only check (e2e-testing references/00-lanes-and-decisions.md, section 4)

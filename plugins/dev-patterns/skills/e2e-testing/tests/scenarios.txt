@@ -1,0 +1,10 @@
+Voy a montar tests e2e con Playwright para una PWA en AWS (CDK, Cognito, CloudFront). ¿Qué corro contra el build local y qué contra el stack desplegado, y en qué momento del CI?
+My Playwright smoke suite went green in CI but the bug was clearly live on the dev stack. How can a whole e2e run pass without testing the deployed commit?
+Mi app usa login con Google en Cognito y Playwright no puede automatizarlo. ¿Cómo logueo al usuario de prueba en los e2e sin abrir una puerta trasera?
+Two Playwright specs that run in parallel against the same deployed stack keep breaking each other's data. How should I seed and clean test data?
+¿Cómo hago para que el deploy a producción se niegue si ese commit exacto no pasó los e2e en staging?
+How do I write a Playwright test for a chat screen whose answer comes from an LLM agent, without the test being flaky or burning tokens on every merge?
+Mi spec de e2e falla una de cada cinco corridas en CI con "element is detached from the DOM". Arreglé algo, ¿cómo demuestro que ya no es flaky?
+Should my GitHub Actions workflow that runs Playwright against a deployed AWS stack trigger on pull_request? It needs an OIDC role to read stack outputs.
+Tengo un flujo de pago con un proveedor externo y notificaciones por WhatsApp. ¿Cómo los pruebo end to end sin cobrar de verdad ni mandar mensajes en cada merge?
+Playwright passes locally, but in CI every spec fails with "Cannot navigate to invalid URL". The baseURL comes from a GitHub variable. What is going on?
